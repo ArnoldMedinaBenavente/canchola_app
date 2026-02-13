@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="ios_bg">#F2F2F7</color> <color name="ios_blue">#007AFF</color> <color name="ios_gray">#8E8E93</color>
+    <color name="ios_card">#FFFFFF</color>
+    <color name="text_dark">#1C1C1E</color>
+</resources>

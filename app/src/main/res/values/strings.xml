@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Canchola</string>
+
+    <string name="option_view_more">Ver más detalles</string>
+    <string name="option_add_comment">Registrar comentario</string>
+    <string name="option_add_progress">Registrar avances</string>
+    <string name="option_take_photo">Tomar foto</string>
+
+    <string name="quote_options_title">Opciones de Cotización</string>
+    <string name="loading_details">Cargando detalles...</string>
+    <string name="loading">Cargando...</string>
+
+</resources>
