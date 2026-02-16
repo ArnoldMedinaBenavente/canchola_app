@@ -1,7 +1,16 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrainsKotlinAndroid)
     id("kotlin-kapt")
+}
+// --- AGREGA ESTO AQUÍ ---
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
 }
 
 android {
@@ -16,7 +25,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        val url = localProperties.getProperty("BASE_URL") ?: "https://fallback.url/"
+        buildConfigField("String", "BASE_URL", "\"$url\"")
     }
+
 
     buildTypes {
         release {
@@ -36,8 +48,11 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true // Asegúrate de que esto esté activo
         viewBinding = true
     }
+
+
 }
 
 dependencies {

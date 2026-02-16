@@ -6,9 +6,9 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor // Importa esto
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-
+import com.canchola.BuildConfig
 object RetrofitClient {
-    private const val BASE_URL = "https://sistema.cancholaerp.site/api/"
+    private const val BASE_URL = BuildConfig.BASE_URL
     private var retrofit: Retrofit? = null
 
     fun getInstance(context: Context): ApiService {
