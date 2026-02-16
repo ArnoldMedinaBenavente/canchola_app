@@ -1,22 +1,15 @@
 package com.canchola.ui.home
 
 import QuotesAdapter
-import android.app.DownloadManager
-import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.canchola.MainActivity
@@ -26,6 +19,7 @@ import com.canchola.data.local.SessionManager
 import com.canchola.data.remote.RetrofitClient
 import com.canchola.databinding.ActivityHomeBinding
 import com.canchola.models.Quote
+import com.canchola.ui.AddLogSheet
 import com.canchola.ui.quotes.QuoteDetailActivity
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -152,8 +146,13 @@ class HomeActivity : AppCompatActivity() {
             dialog.dismiss()
             mostrarFormularioAvance(quote)
         }
-
-        // Opción 3: TOMAR FOTO
+        // Opción 3: Commentario
+        view.findViewById<TextView>(R.id.btnAddComment).setOnClickListener {
+            dialog.dismiss()
+            val sheet = AddLogSheet(quoteId = quote.idQuote) // Pasas el ID
+            sheet.show(supportFragmentManager, "AddLog")
+        }
+        // Opción 4: TOMAR FOTO
         view.findViewById<TextView>(R.id.btnAddPhoto).setOnClickListener {
             dialog.dismiss()
          //   abrirCamara(quote)

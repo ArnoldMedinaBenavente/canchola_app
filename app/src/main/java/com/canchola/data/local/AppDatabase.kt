@@ -4,16 +4,18 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.canchola.data.local.db.LogEntryDao
 import com.canchola.data.local.quotes.QuoteDao
+import com.canchola.models.LogEntry
 import com.canchola.models.Quote
 
 // 1. Aquí registras el modelo (Entity) y la versión
-@Database(entities = [Quote::class], version = 1)
+@Database(entities = [Quote::class,LogEntry::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     // 2. AQUÍ SE REGISTRA EL DAO
     abstract fun quoteDao(): QuoteDao
-
+    abstract fun logEntryDao(): LogEntryDao
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
@@ -24,7 +26,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "canchola_db" // Nombre del archivo en el celular
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }
