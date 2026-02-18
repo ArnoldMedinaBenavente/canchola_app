@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="NuevO"
+        android:text="Nuevo"
         style="@style/TextAppearance.MaterialComponents.Headline6" />
 
     <EditText
@@ -19,12 +19,12 @@
         android:layout_marginTop="16dp"
         android:hint="Escribe un comentario..." />
 
-    <ImageView
-        android:id="@+id/ivPreview"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvPhotos"
         android:layout_width="match_parent"
-        android:layout_height="200dp"
+        android:layout_height="120dp"
         android:layout_marginTop="8dp"
-        android:scaleType="centerCrop"
+        android:orientation="horizontal"
         android:visibility="gone" />
 
     <Button

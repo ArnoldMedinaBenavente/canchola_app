@@ -24,7 +24,8 @@ interface ApiService {
         suspend fun uploadLogEntry(
         @Part("comment") comment: RequestBody,
         @Part("quote_id") quoteId: RequestBody?, // Puede ser null si es general
-        @Part photo: MultipartBody.Part?        // Puede ser null si no hay foto
+        @Part photos: List<MultipartBody.Part>,        // Puede ser null si no hay foto
+        @Part ("created_at") created_at_app: RequestBody?        // Puede ser null si no hay foto
         ): Response<GenericResponse>
 
 

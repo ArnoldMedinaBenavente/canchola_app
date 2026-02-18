@@ -5,17 +5,20 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.canchola.data.local.db.LogEntryDao
+import com.canchola.data.local.db.PhotoDao
 import com.canchola.data.local.quotes.QuoteDao
 import com.canchola.models.LogEntry
 import com.canchola.models.Quote
+import com.canchola.ui.photo.Photos
 
 // 1. Aquí registras el modelo (Entity) y la versión
-@Database(entities = [Quote::class,LogEntry::class], version = 2, exportSchema = false)
+@Database(entities = [Quote::class,LogEntry::class, Photos::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     // 2. AQUÍ SE REGISTRA EL DAO
     abstract fun quoteDao(): QuoteDao
     abstract fun logEntryDao(): LogEntryDao
+    abstract fun photoDao(): PhotoDao
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
