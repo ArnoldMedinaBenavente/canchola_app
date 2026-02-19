@@ -27,7 +27,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class AddLogSheet(val quoteId: Int? = null) : BottomSheetDialogFragment() {
+class AddLogSheet(val quoteId: Int? = null,val type:String?) : BottomSheetDialogFragment() {
 
     // 1. DECLARACIÓN CORRECTA (A nivel de clase y con Factory)
     private val viewModel: LogViewModel by activityViewModels {
@@ -83,6 +83,10 @@ class AddLogSheet(val quoteId: Int? = null) : BottomSheetDialogFragment() {
 
         // Acción de Tomar Foto
         btnPhoto.setOnClickListener {
+            openCamera()
+        }
+
+        if(type.equals("photo")){
             openCamera()
         }
 

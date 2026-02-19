@@ -3,6 +3,7 @@ package com.canchola.ui.home
 import QuotesAdapter
 import android.content.Intent
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
@@ -10,6 +11,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContentProviderCompat.requireContext
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.canchola.MainActivity
@@ -25,6 +28,9 @@ import com.canchola.ui.quotes.QuoteDetailActivity
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class HomeActivity : AppCompatActivity() {
 
@@ -32,6 +38,9 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var adapter: QuotesAdapter
     private val apiService by lazy { RetrofitClient.getInstance(this) }
     private lateinit var db: AppDatabase
+
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
@@ -150,13 +159,15 @@ class HomeActivity : AppCompatActivity() {
         // Opción 3: Commentario
         view.findViewById<TextView>(R.id.btnAddComment).setOnClickListener {
             dialog.dismiss()
-            val sheet = AddLogSheet(quoteId = quote.idQuote) // Pasas el ID
+            val sheet = AddLogSheet(quoteId = quote.idQuote,"comment") // Pasas el ID
             sheet.show(supportFragmentManager, "AddLog")
         }
         // Opción 4: TOMAR FOTO
         view.findViewById<TextView>(R.id.btnAddPhoto).setOnClickListener {
+
             dialog.dismiss()
-         //   abrirCamara(quote)
+            val sheet = AddLogSheet(quoteId = quote.idQuote,"photo") // Pasas el ID
+            sheet.show(supportFragmentManager, "AddLog")
         }
 
         dialog.setContentView(view)
@@ -219,4 +230,6 @@ class HomeActivity : AppCompatActivity() {
 
         dialog.show()
     }
+
+
 }

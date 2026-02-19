@@ -12,7 +12,7 @@ import com.canchola.models.Quote
 import com.canchola.ui.photo.Photos
 
 // 1. Aquí registras el modelo (Entity) y la versión
-@Database(entities = [Quote::class,LogEntry::class, Photos::class], version = 3, exportSchema = false)
+@Database(entities = [Quote::class,LogEntry::class, Photos::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     // 2. AQUÍ SE REGISTRA EL DAO

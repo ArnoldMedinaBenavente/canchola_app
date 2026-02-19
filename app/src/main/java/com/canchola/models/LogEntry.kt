@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 data class LogEntry(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val quoteId: Int? = null,       // El ID de la cotización (Laravel)
-    val comment: String,
+    val comment: String? = "Sin comentarios",
    // val photoUri: String?,      // Ruta de la foto en el móvil
     val createdAt: Long = System.currentTimeMillis(),
     val isSynced: Boolean = false, // false = pendiente de enviar a Laravel

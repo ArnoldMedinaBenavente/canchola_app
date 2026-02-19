@@ -17,4 +17,7 @@ interface PhotoDao {
     // Útil para tu Sync con Laravel
     @Query("SELECT * FROM photos WHERE isUploaded = 0")
     suspend fun getUnsyncedPhotos(): List<Photos>
+
+    @Query("UPDATE photos SET isUploaded = 1 WHERE logEntryId = :idLog")
+    suspend fun markPhotosAsUploaded(idLog:Int)
 }

@@ -37,12 +37,30 @@ class LogRepository(
         return withContext(Dispatchers.IO) {
             val localId = logEntryDao.insert(log).toInt()
             // ... (resto de tu lógica de guardado de fotos)
+            // 2. Preparar las fotos con el ID del padre
+
+
+            val photoEntities = photoPaths.map { path ->
+                Photos(
+                    logEntryId = localId, // Asignamos la FK
+                    uri = path,
+                    isUploaded = false
+                )
+
+            }
+
+            // 3. Guardar las fotos
+            if (photoEntities.isNotEmpty()) {
+                photoDao.insertPhotos(photoEntities)
+            }
 
             if (isNetworkAvailable(context)) {
                 try {
                     val response = uploadToLaravel(log, photoPaths)
                     if (response.isSuccessful) {
                         logEntryDao.updateSyncStatus(localId)
+                        photoDao.markPhotosAsUploaded(localId)
+
                         return@withContext true // Éxito total
                     }
                 } catch (e: Exception) {
