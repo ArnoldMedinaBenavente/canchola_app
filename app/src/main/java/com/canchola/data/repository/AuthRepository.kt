@@ -17,6 +17,11 @@ class AuthRepository(
             response.body()?.access_token?.let { token ->
                 sessionManager.saveAuthToken(token)
             }
+            val user = response.body()?.user
+            user?.id?.let{
+                sessionManager.saveUserId(it)
+            }
+
         }
         return response
     }

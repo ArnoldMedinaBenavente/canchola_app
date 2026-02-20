@@ -30,7 +30,13 @@
         app:layout_constraintTop_toBottomOf="@+id/tvNombreAlcance"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
-
+        <TextView
+            android:id="@+id/tvIdConcept"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text=""
+            android:visibility="gone"/>
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"

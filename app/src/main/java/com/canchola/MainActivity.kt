@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         viewModel.loginResult.observe(this) { response ->
             if (response.isSuccessful && response.body()?.success == true) {
                 val user = response.body()?.user
+
                 Toast.makeText(this, "Bienvenido, ${user?.name}", Toast.LENGTH_LONG).show()
                 // Ir al Home y cerrar el Login
                 val intent = Intent(this, HomeActivity::class.java)

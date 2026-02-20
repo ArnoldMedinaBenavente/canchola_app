@@ -22,6 +22,7 @@ import com.canchola.data.local.SessionManager
 import com.canchola.data.remote.RetrofitClient
 import com.canchola.databinding.ActivityHomeBinding
 import com.canchola.models.Quote
+import com.canchola.models.QuoteConcepts
 import com.canchola.ui.AddLogSheet
 import com.canchola.ui.quotes.QuoteDetailActivity
 
@@ -32,6 +33,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+
 class HomeActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityHomeBinding
@@ -39,7 +41,8 @@ class HomeActivity : AppCompatActivity() {
     private val apiService by lazy { RetrofitClient.getInstance(this) }
     private lateinit var db: AppDatabase
 
-
+    private lateinit var sessionManager: SessionManager
+    var currentUserId: Int? =null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +53,8 @@ class HomeActivity : AppCompatActivity() {
         setupRecyclerView()
         setupListeners()
         loadQuotes()
+        sessionManager = SessionManager(this)
+         currentUserId = sessionManager.getUserId()
     }
 
     private fun setupRecyclerView() {
@@ -188,16 +193,19 @@ class HomeActivity : AppCompatActivity() {
         if (cadenaAlcances.isNotEmpty()) {
             val lista = cadenaAlcances.split("|")
 
-            lista.forEach { nombre ->
-                val nombreLimpio = nombre.trim()
-                if (nombreLimpio.isNotEmpty()) {
+            lista.forEach { concepto ->
+                val conceptoLimpio = concepto.trim()
+                if (conceptoLimpio.isNotEmpty()) {
+                    val dataConcepto = conceptoLimpio.split(";")
+                    val idConcepto = dataConcepto.get(0)
+                    val nombreConcepto = dataConcepto.get(1)
                     // 2. Inflamos el diseño que ya tenías (item_alcance)
                     val itemView = layoutInflater.inflate(R.layout.item_alcance, null)
-
+                    val tvIdConcept=itemView.findViewById<TextView>(R.id.tvIdConcept)
                     val tvNombre = itemView.findViewById<TextView>(R.id.tvNombreAlcance)
                     val etCantidad = itemView.findViewById<EditText>(R.id.etCantidadAvance)
-
-                    tvNombre.text = nombreLimpio
+                    tvIdConcept.text= idConcepto
+                    tvNombre.text = nombreConcepto
                     etCantidad.setHint("0.0")
 
                     // Agregamos el item al contenedor del DIÁLOGO
@@ -212,20 +220,28 @@ class HomeActivity : AppCompatActivity() {
 
             for (i in 0 until container.childCount) {
                 val item = container.getChildAt(i)
+                val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
                 val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
                 val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
 
                 if (cant.isNotEmpty()) {
+                    val newConcept= QuoteConcepts(
+                        idConcept = idConcept,
+                        quoteId = quote?.idQuote,
+                        nameConcept = nombre,
+                        cantConcept = cant,
+                        isSynced = false,
+                        idUser = currentUserId
+                    )
                     datosAEnviar.add("$nombre:$cant")
+                    lifecycleScope.launch {
+                        db.quoteConceptDao().insert(newConcept)
+
+                    }
                 }
             }
-
-            // Aquí mandas la lista a tu backend Laravel
-            if (datosAEnviar.isNotEmpty()) {
-                val cadenaFinal = datosAEnviar.joinToString("|")
-                //actualizarEnLaravel(quote?.idQuote, cadenaFinal)
-                dialog.dismiss()
-            }
+            dialog.dismiss()
+           Toast.makeText(this,"")
         }
 
         dialog.show()
