@@ -38,7 +38,8 @@ interface ApiService {
         @Part("quote_id") quoteId: RequestBody?, // Puede ser null si es general
         @Part("concepts") concepts: RequestBody,
         @Part("idUser") userId: RequestBody?, // Puede ser null si es general
-        @Part ("created_at") created_at_app: RequestBody?        // Puede ser null si no hay foto
+        @Part("created_at") created_at_app: RequestBody?,        // Puede ser null si no hay foto
+
     ): Response<GenericResponse>
     // Clase para recibir mensajes de éxito de tu ERP (ej: {"message": "Guardado"})
     data class GenericResponse(val message: String, val status: Int)

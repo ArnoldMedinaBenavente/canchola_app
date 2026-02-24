@@ -3,7 +3,6 @@ package com.canchola.ui.home
 import QuotesAdapter
 import android.content.Intent
 import android.os.Bundle
-import android.os.Environment
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
@@ -11,8 +10,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContentProviderCompat.requireContext
-import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.canchola.MainActivity
@@ -20,6 +17,7 @@ import com.canchola.R
 import com.canchola.data.local.AppDatabase
 import com.canchola.data.local.SessionManager
 import com.canchola.data.remote.RetrofitClient
+import com.canchola.data.repository.QuoteConceptRepository
 import com.canchola.databinding.ActivityHomeBinding
 import com.canchola.models.Quote
 import com.canchola.models.QuoteConcepts
@@ -28,10 +26,6 @@ import com.canchola.ui.quotes.QuoteDetailActivity
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.launch
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 
 class HomeActivity : AppCompatActivity() {
@@ -43,6 +37,7 @@ class HomeActivity : AppCompatActivity() {
 
     private lateinit var sessionManager: SessionManager
     var currentUserId: Int? =null
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -179,7 +174,8 @@ class HomeActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun mostrarFormularioAvance(quote: Quote?) {
+    private fun mostrarFormularioAvance(quote: Quote) {
+
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_registrar_avance, null)
         dialog.setContentView(view)
@@ -216,32 +212,50 @@ class HomeActivity : AppCompatActivity() {
 
         // 3. Lógica para guardar todo lo que se escribió en el diálogo
         btnGuardar.setOnClickListener {
-            val datosAEnviar = mutableListOf<String>()
+            lifecycleScope.launch {
+                val datosAEnviar = mutableListOf<String>()
 
-            for (i in 0 until container.childCount) {
-                val item = container.getChildAt(i)
-                val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
-                val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
-                val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
+                for (i in 0 until container.childCount) {
+                    val item = container.getChildAt(i)
+                    val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
+                    val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
+                    val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
 
-                if (cant.isNotEmpty()) {
-                    val newConcept= QuoteConcepts(
-                        idConcept = idConcept,
-                        quoteId = quote?.idQuote,
-                        nameConcept = nombre,
-                        cantConcept = cant,
-                        isSynced = false,
-                        idUser = currentUserId
-                    )
-                    datosAEnviar.add("$nombre:$cant")
-                    lifecycleScope.launch {
-                        db.quoteConceptDao().insert(newConcept)
+                    if (cant.isNotEmpty()) {
+                        val newConcept = QuoteConcepts(
+                            idConcept = idConcept,
+                            quoteId = quote?.idQuote,
+                            nameConcept = nombre,
+                            cantConcept = cant,
+                            isSynced = false,
+                            idUser = currentUserId
+                        )
+                        datosAEnviar.add("$nombre:$cant")
+                        lifecycleScope.launch {
+                            db.quoteConceptDao().insert(newConcept)
 
+                        }
                     }
                 }
+                val repoitoryQuoteConcepts = QuoteConceptRepository(
+                    quote,
+                    sessionManager.getUserId(), db.quoteConceptDao(), apiService, this@HomeActivity
+                )
+                val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote)
+                val isSynced = repoitoryQuoteConcepts.SyncConcepts(quoteConceptsList)
+
+                if (isSynced) {
+                    Toast.makeText(this@HomeActivity, "✅ Enviado exitosamente", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@HomeActivity, "💾 Guardado localmente ", Toast.LENGTH_LONG).show()
+                }
+
+                dialog.dismiss()
+
+
+
+
             }
-            dialog.dismiss()
-           Toast.makeText(this,"")
         }
 
         dialog.show()

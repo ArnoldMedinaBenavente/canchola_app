@@ -27,11 +27,11 @@ interface  QuoteConceptDao{
         // --- FUNCIONES PARA EL FLUJO DE INTERNET ---
 
         // Obtener los registros que aún no se han subido a la nube de Laravel
-        @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0")
-        suspend fun getUnsyncedConcepts(): List<QuoteConcepts>
+        @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0 AND quoteId= :id")
+        suspend fun getUnsyncedConcepts(id:Int): List<QuoteConcepts>
 
         // Actualizar el estado a 'Sincronizado' cuando Laravel confirme la recepción
-        @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE id = :id")
+        @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE quoteId = :id")
         suspend fun updateSyncStatus(id: Int)
 
         // Borrar un registro (por si el usuario desea eliminar una evidencia)

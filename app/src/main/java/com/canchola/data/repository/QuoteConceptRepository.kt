@@ -9,39 +9,39 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.canchola.data.local.db.QuoteConceptDao
 import com.canchola.data.remote.ApiService
-import com.canchola.models.LogEntry
+import com.canchola.models.DateHelper
+import com.canchola.models.Quote
 import com.canchola.models.QuoteConcepts
-import com.canchola.ui.photo.Photos
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
 import java.io.File
 import java.io.FileOutputStream
 
 class QuoteConceptRepository(
-  private val quoteConceptDao: QuoteConceptDao,
+    private val quote: Quote?,
+    private val userId:Int,
+    private val quoteConceptDao: QuoteConceptDao,
     private val apiService: ApiService,
     private val context: Context
 ) {
     // Flow para observar todos los logs desde la UI
     val allLogs: Flow<List<QuoteConcepts>> = quoteConceptDao.getAllLConcepts()
 
-    suspend fun SyncConcepts( photoPaths: List<QuoteConcepts>): Boolean {
+    suspend fun SyncConcepts( quoteConcepts: List<QuoteConcepts>): Boolean {
         return withContext(Dispatchers.IO) {
-
+            val currentQuoteId = quote?.idQuote ?: 0
 
             if (isNetworkAvailable(context)) {
                 try {
-                    val response = uploadToLaravel(log, photoPaths)
+                    val response = uploadToLaravel(currentQuoteId, userId,quoteConcepts, DateHelper.getCurrentDateForServer() )
                     if (response.isSuccessful) {
-                        logEntryDao.updateSyncStatus(localId)
-                        photoDao.markPhotosAsUploaded(localId)
+
+                        quoteConceptDao.updateSyncStatus(currentQuoteId)
 
                         return@withContext true // Éxito total
                     }
@@ -76,7 +76,7 @@ class QuoteConceptRepository(
         // 4. Llamamos a Retrofit
         return apiService.uploadQuoteConcept(
             quoteId = quoteIdPart,
-            conecepts = conceptsPart,
+            concepts = conceptsPart,
             userId = userIdPart,
             created_at_app = createdAtPart
         )
@@ -96,13 +96,5 @@ class QuoteConceptRepository(
     }
 
     // Función rápida para comprimir antes de crear el RequestBody
-    private fun compressImage(file: File): File {
-        val bitmap = decodeFile(file.path)
-        val compressedFile = File(context.cacheDir, "comp_" + file.name)
-        val out = FileOutputStream(compressedFile)
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out) // 70% de calidad es suficiente
-        out.flush()
-        out.close()
-        return compressedFile
-    }
+
 }
