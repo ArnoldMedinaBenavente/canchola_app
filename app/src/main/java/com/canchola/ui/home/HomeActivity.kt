@@ -2,16 +2,22 @@ package com.canchola.ui.home
 
 import QuotesAdapter
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.canchola.MainActivity
 import com.canchola.R
 import com.canchola.data.local.AppDatabase
@@ -22,10 +28,15 @@ import com.canchola.databinding.ActivityHomeBinding
 import com.canchola.models.Quote
 import com.canchola.models.QuoteConcepts
 import com.canchola.ui.AddLogSheet
+import com.canchola.ui.photo.PhotoAdapter
 import com.canchola.ui.quotes.QuoteDetailActivity
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.launch
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 class HomeActivity : AppCompatActivity() {
@@ -38,11 +49,34 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var sessionManager: SessionManager
     var currentUserId: Int? =null
 
+    // Variables para manejar qué lista y adaptador actualizar al tomar una foto
+    private var currentEditingUriList: MutableList<Uri>? = null
+    private var currentEditingAdapter: PhotoAdapter? = null
+
+    // Variable temporal para la foto que se está tomando en este momento
+    private var currentPhotoUri: Uri? = null
+    private var currentPhotoAbsolutePath: String? = null
+
+    private val takePhotoLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success && currentPhotoUri != null) {
+            currentPhotoAbsolutePath?.let { path ->
+                val newUri = Uri.fromFile(java.io.File(path))
+                
+                // Si tenemos un "contexto" de edición (un RecyclerView específico), lo actualizamos
+                currentEditingUriList?.let { list ->
+                    list.add(newUri)
+                    currentEditingAdapter?.notifyItemInserted(list.size - 1)
+                }
+            }
+        }
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
         // Inicializas la base de datos
         db = AppDatabase.getDatabase(this)
         setupRecyclerView()
@@ -110,9 +144,6 @@ class HomeActivity : AppCompatActivity() {
 
         // 2. Asignamos el adaptador al RecyclerView
         binding.rvQuotes.adapter = adapter
-
-        // 3. (Opcional) Si la lista está vacía, podrías mostrar un mensaje de "No hay cotizaciones"
-
     }
 
 
@@ -164,10 +195,8 @@ class HomeActivity : AppCompatActivity() {
         }
         // Opción 4: TOMAR FOTO
         view.findViewById<TextView>(R.id.btnAddPhoto).setOnClickListener {
-
             dialog.dismiss()
-            val sheet = AddLogSheet(quoteId = quote.idQuote,"photo") // Pasas el ID
-            sheet.show(supportFragmentManager, "AddLog")
+            // Aquí podrías manejar fotos generales de la cotización si fuera necesario
         }
 
         dialog.setContentView(view)
@@ -175,15 +204,13 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun mostrarFormularioAvance(quote: Quote) {
-
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        val dialog = BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_registrar_avance, null)
         dialog.setContentView(view)
 
         val container = view.findViewById<LinearLayout>(R.id.containerAlcancesDialog)
         val btnGuardar = view.findViewById<Button>(R.id.btnGuardarTodoDialog)
 
-        // 1. Obtenemos la cadena de conceptos (ej: "Pintura | Tablaroca | Piso")
         val cadenaAlcances = quote?.conceptos ?: ""
 
         if (cadenaAlcances.isNotEmpty()) {
@@ -195,26 +222,53 @@ class HomeActivity : AppCompatActivity() {
                     val dataConcepto = conceptoLimpio.split(";")
                     val idConcepto = dataConcepto.get(0)
                     val nombreConcepto = dataConcepto.get(1)
-                    // 2. Inflamos el diseño que ya tenías (item_alcance)
+                    
                     val itemView = layoutInflater.inflate(R.layout.item_alcance, null)
-                    val tvIdConcept=itemView.findViewById<TextView>(R.id.tvIdConcept)
+                    val tvIdConcept = itemView.findViewById<TextView>(R.id.tvIdConcept)
                     val tvNombre = itemView.findViewById<TextView>(R.id.tvNombreAlcance)
                     val etCantidad = itemView.findViewById<EditText>(R.id.etCantidadAvance)
-                    tvIdConcept.text= idConcepto
+                    val btnAgregarFoto = itemView.findViewById<Button>(R.id.btnAgregarFoto)
+                    val btnAgregarComentario = itemView.findViewById<Button>(R.id.btnAgregarComentario)
+                    val rvPhotos = itemView.findViewById<RecyclerView>(R.id.rvPhotosHome)
+                    val etComentario = itemView.findViewById<EditText>(R.id.etComentario)
+                    
+                    // --- NUEVO: Cada concepto tiene su propia lista de  y su propio adaptador ---
+                    val itemUriList = mutableListOf<Uri>()
+                    val itemPhotoAdapter = PhotoAdapter(itemUriList) { position ->
+                        itemUriList.removeAt(position)
+                        // Notificamos al adaptador específico de este item
+                        (rvPhotos.adapter as? PhotoAdapter)?.notifyItemRemoved(position)
+                    }
+
+                    rvPhotos.visibility = View.VISIBLE
+                    rvPhotos.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+                    rvPhotos.adapter = itemPhotoAdapter
+
+                    tvIdConcept.text = idConcepto
                     tvNombre.text = nombreConcepto
                     etCantidad.setHint("0.0")
 
-                    // Agregamos el item al contenedor del DIÁLOGO
                     container.addView(itemView)
+                    btnAgregarComentario.setOnClickListener {
+                        if(etComentario.visibility == View.VISIBLE){
+                            etComentario.visibility = View.GONE
+                        }else {
+                            etComentario.visibility = View.VISIBLE
+                        }
+
+                    }
+                    btnAgregarFoto.setOnClickListener {
+                        // Antes de abrir la cámara, guardamos la referencia de qué lista/adapter actualizar
+                        currentEditingUriList = itemUriList
+                        currentEditingAdapter = itemPhotoAdapter
+                        openCamera()
+                    }
                 }
             }
         }
 
-        // 3. Lógica para guardar todo lo que se escribió en el diálogo
         btnGuardar.setOnClickListener {
             lifecycleScope.launch {
-                val datosAEnviar = mutableListOf<String>()
-
                 for (i in 0 until container.childCount) {
                     val item = container.getChildAt(i)
                     val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
@@ -230,16 +284,15 @@ class HomeActivity : AppCompatActivity() {
                             isSynced = false,
                             idUser = currentUserId
                         )
-                        datosAEnviar.add("$nombre:$cant")
-                        lifecycleScope.launch {
-                            db.quoteConceptDao().insert(newConcept)
-
-                        }
+                        db.quoteConceptDao().insert(newConcept)
+                        
+                        // NOTA: Aquí podrías guardar también las fotos asociadas a este concepto
+                        // (itemUriList de este concepto) en tu DB o enviarlas a la API.
                     }
                 }
+                
                 val repoitoryQuoteConcepts = QuoteConceptRepository(
-                    quote,
-                    sessionManager.getUserId(), db.quoteConceptDao(), apiService, this@HomeActivity
+                    quote, sessionManager.getUserId(), db.quoteConceptDao(), apiService, this@HomeActivity
                 )
                 val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote)
                 val isSynced = repoitoryQuoteConcepts.SyncConcepts(quoteConceptsList)
@@ -249,17 +302,27 @@ class HomeActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(this@HomeActivity, "💾 Guardado localmente ", Toast.LENGTH_LONG).show()
                 }
-
                 dialog.dismiss()
-
-
-
-
             }
         }
-
         dialog.show()
     }
 
+    private fun openCamera() {
+        val photoFile = createImageFile()
+        currentPhotoAbsolutePath = photoFile.absolutePath
+        currentPhotoUri = FileProvider.getUriForFile(
+            this, "${this.packageName}.provider", photoFile
+        )
 
+        currentPhotoUri?.let { uri ->
+            takePhotoLauncher.launch(uri)
+        }
+    }
+
+    private fun createImageFile(): File {
+        val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val storageDir: File? = this.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        return File.createTempFile("CANCHOLA_${timeStamp}_", ".jpg", storageDir)
+    }
 }
