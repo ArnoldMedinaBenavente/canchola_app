@@ -25,10 +25,12 @@ import com.canchola.data.local.SessionManager
 import com.canchola.data.remote.RetrofitClient
 import com.canchola.data.repository.QuoteConceptRepository
 import com.canchola.databinding.ActivityHomeBinding
+import com.canchola.models.LogEntry
 import com.canchola.models.Quote
 import com.canchola.models.QuoteConcepts
 import com.canchola.ui.AddLogSheet
 import com.canchola.ui.photo.PhotoAdapter
+import com.canchola.ui.photo.Photos
 import com.canchola.ui.quotes.QuoteDetailActivity
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -213,6 +215,9 @@ class HomeActivity : AppCompatActivity() {
 
         val cadenaAlcances = quote?.conceptos ?: ""
 
+        // Mapas para guardar las referencias de datos por cada vista inflada
+        val dataMap = mutableMapOf<View, MutableList<Uri>>()
+
         if (cadenaAlcances.isNotEmpty()) {
             val lista = cadenaAlcances.split("|")
 
@@ -234,9 +239,10 @@ class HomeActivity : AppCompatActivity() {
                     
                     // --- NUEVO: Cada concepto tiene su propia lista de  y su propio adaptador ---
                     val itemUriList = mutableListOf<Uri>()
+                    dataMap[itemView] = itemUriList
+                    
                     val itemPhotoAdapter = PhotoAdapter(itemUriList) { position ->
                         itemUriList.removeAt(position)
-                        // Notificamos al adaptador específico de este item
                         (rvPhotos.adapter as? PhotoAdapter)?.notifyItemRemoved(position)
                     }
 
@@ -250,15 +256,9 @@ class HomeActivity : AppCompatActivity() {
 
                     container.addView(itemView)
                     btnAgregarComentario.setOnClickListener {
-                        if(etComentario.visibility == View.VISIBLE){
-                            etComentario.visibility = View.GONE
-                        }else {
-                            etComentario.visibility = View.VISIBLE
-                        }
-
+                        etComentario.visibility = if(etComentario.visibility == View.VISIBLE) View.GONE else View.VISIBLE
                     }
                     btnAgregarFoto.setOnClickListener {
-                        // Antes de abrir la cámara, guardamos la referencia de qué lista/adapter actualizar
                         currentEditingUriList = itemUriList
                         currentEditingAdapter = itemPhotoAdapter
                         openCamera()
@@ -274,20 +274,47 @@ class HomeActivity : AppCompatActivity() {
                     val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
                     val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
                     val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
+                    val comentario = item.findViewById<EditText>(R.id.etComentario).text.toString()
+                    val uris = dataMap[item] ?: emptyList<Uri>()
 
+                    var logIdGenerated: Int? = null
+
+                    // 1. Primero guardamos el LogEntry si hay evidencia (comentario o fotos)
+                    if (comentario.isNotEmpty() || uris.isNotEmpty()) {
+                        val insertedId = db.logEntryDao().insert(LogEntry(
+                            quoteId = quote.idQuote,
+                            idConcept = idConcept,
+                            comment = if(comentario.isEmpty()) "Avance de $nombre" else comentario,
+                            isSynced = false
+                        ))
+                        logIdGenerated = insertedId.toInt()
+
+                        // Guardar las Fotos vinculadas al LogEntry
+                        if (uris.isNotEmpty()) {
+                            val photosToInsert = uris.map { uri ->
+                                Photos(
+                                    logEntryId = logIdGenerated,
+                                    uri = uri.toString(),
+                                    isUploaded = false
+                                )
+                            }
+                            db.photoDao().insertPhotos(photosToInsert)
+                        }
+                    }
+
+                    // 2. Guardar el Avance (QuoteConcepts) vinculando el idLog
                     if (cant.isNotEmpty()) {
                         val newConcept = QuoteConcepts(
                             idConcept = idConcept,
                             quoteId = quote?.idQuote,
                             nameConcept = nombre,
                             cantConcept = cant,
+                            comment = if(comentario.isNotEmpty()) comentario else null,
+                            idLog = logIdGenerated, // VÍNCULO DIRECTO
                             isSynced = false,
                             idUser = currentUserId
                         )
                         db.quoteConceptDao().insert(newConcept)
-                        
-                        // NOTA: Aquí podrías guardar también las fotos asociadas a este concepto
-                        // (itemUriList de este concepto) en tu DB o enviarlas a la API.
                     }
                 }
                 
@@ -302,6 +329,10 @@ class HomeActivity : AppCompatActivity() {
                 } else {
                     Toast.makeText(this@HomeActivity, "💾 Guardado localmente ", Toast.LENGTH_LONG).show()
                 }
+                
+                // Limpiar referencias
+                currentEditingUriList = null
+                currentEditingAdapter = null
                 dialog.dismiss()
             }
         }
