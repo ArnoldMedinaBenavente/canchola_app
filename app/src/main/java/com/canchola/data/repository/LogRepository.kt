@@ -6,18 +6,19 @@ import android.graphics.BitmapFactory
 import android.graphics.BitmapFactory.*
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
+import android.util.Log
 import com.canchola.data.local.db.LogEntryDao
 import com.canchola.data.local.db.PhotoDao
 import com.canchola.data.remote.ApiService
+import com.canchola.models.DateHelper
 import com.canchola.models.LogEntry
 import com.canchola.ui.photo.Photos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
@@ -30,71 +31,96 @@ class LogRepository(
     private val apiService: ApiService,
     private val context: Context
 ) {
-    // Flow para observar todos los logs desde la UI
     val allLogs: Flow<List<LogEntry>> = logEntryDao.getAllLogs()
 
     suspend fun saveAndSyncLog(log: LogEntry, photoPaths: List<String>): Boolean {
         return withContext(Dispatchers.IO) {
             val localId = logEntryDao.insert(log).toInt()
-            // ... (resto de tu lógica de guardado de fotos)
-            // 2. Preparar las fotos con el ID del padre
-
-
+            
             val photoEntities = photoPaths.map { path ->
                 Photos(
-                    logEntryId = localId, // Asignamos la FK
+                    logEntryId = localId,
                     uri = path,
                     isUploaded = false
                 )
-
             }
 
-            // 3. Guardar las fotos
             if (photoEntities.isNotEmpty()) {
                 photoDao.insertPhotos(photoEntities)
             }
 
             if (isNetworkAvailable(context)) {
                 try {
-                    val response = uploadToLaravel(log, photoPaths)
-                    if (response.isSuccessful) {
+                    val response = uploadToLaravel(log.copy(id = localId), photoPaths)
+                    if (response.isSuccessful && response.body()?.status == "success") {
                         logEntryDao.updateSyncStatus(localId)
                         photoDao.markPhotosAsUploaded(localId)
-
-                        return@withContext true // Éxito total
+                        return@withContext true
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e("SYNC_ERROR", "Error syncing log: ${e.message}")
                 }
             }
+            return@withContext false
+        }
+    }
 
-            showOfflineNotification()
-            return@withContext false // Solo se guardó localmente
+    suspend fun syncAllUnsyncedLogs(): Boolean {
+        return withContext(Dispatchers.IO) {
+            if (!isNetworkAvailable(context)) return@withContext false
+            
+            try {
+                val unsyncedLogs = logEntryDao.getUnsyncedLogs()
+                var allSuccess = true
+                
+                for (log in unsyncedLogs) {
+                    val photos = photoDao.getUnsyncedPhotosByLog(log.id)
+                    val photoPaths = photos.map { it.uri }
+                    
+                    val response = uploadToLaravel(log, photoPaths)
+                    if (response.isSuccessful && response.body()?.status == "success") {
+                        logEntryDao.updateSyncStatus(log.id)
+                        photoDao.markPhotosAsUploaded(log.id)
+                    } else {
+                        allSuccess = false
+                    }
+                }
+                return@withContext allSuccess
+            } catch (e: Exception) {
+                Log.e("SYNC_ALL_ERROR", "Error syncing all: ${e.message}")
+                return@withContext false
+            }
         }
     }
 
     private suspend fun uploadToLaravel(log: LogEntry, paths: List<String>): Response<ApiService.GenericResponse> {
-
-        val photoParts = paths.map { path ->
-            val file = File(path)
-
-            // OPCIONAL: Comprimir antes de enviar
-            // val fileToUpload = compressImage(file)
-            val fileToUpload = compressImage(file)
-
-            // CORRECCIÓN: Usar .asRequestBody() que es la forma moderna en Kotlin
-            val requestFile = fileToUpload.asRequestBody("image/jpeg".toMediaTypeOrNull())
-
-            // El nombre "photos[]" es clave para que Laravel lo reciba como array
-            MultipartBody.Part.createFormData("photos[]", fileToUpload.name, requestFile)
+        val photoParts = paths.mapNotNull { path ->
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    val compressedFile = compressImage(file)
+                    val requestFile = compressedFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                    MultipartBody.Part.createFormData("photos[]", compressedFile.name, requestFile)
+                } else null
+            } catch (e: Exception) {
+                null
+            }
         }
 
         val commentPart = (log.comment ?: "").toRequestBody("text/plain".toMediaTypeOrNull())
         val quoteIdPart = log.quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
-        val createdAtPart = log.createdAt.toString().toRequestBody("text/plain".toMediaTypeOrNull())
+        val idConceptPart = log.idConcept?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val createdAtPart = DateHelper.formatLongToDate(log.createdAt).toRequestBody("text/plain".toMediaTypeOrNull())
+        val amountPart = log.cantidad?.toRequestBody("text/plain".toMediaTypeOrNull())
 
-        // ERROR CORREGIDO: Te faltaba pasar el parámetro 'createdAtPart' en la llamada
-        return apiService.uploadLogEntry(commentPart, quoteIdPart, photoParts, createdAtPart)
+        return apiService.uploadLogEntry(
+            comment = commentPart,
+            quoteId = quoteIdPart,
+            idConcept = idConceptPart,
+            amount = amountPart,
+            photos = photoParts,
+            created_at_app = createdAtPart
+        )
     }
 
     private fun isNetworkAvailable(context: Context): Boolean {
@@ -104,17 +130,11 @@ class LogRepository(
         return activeNetwork.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    private fun showOfflineNotification() {
-        // Aquí va tu lógica para disparar la notificación de "Información pendiente de enviar"
-        // Puedes usar un NotificationManager básico
-    }
-
-    // Función rápida para comprimir antes de crear el RequestBody
     private fun compressImage(file: File): File {
         val bitmap = decodeFile(file.path)
         val compressedFile = File(context.cacheDir, "comp_" + file.name)
         val out = FileOutputStream(compressedFile)
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out) // 70% de calidad es suficiente
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
         out.flush()
         out.close()
         return compressedFile

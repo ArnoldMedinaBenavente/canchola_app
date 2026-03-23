@@ -30,7 +30,13 @@ interface  QuoteConceptDao{
         @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0 AND quoteId= :id")
         suspend fun getUnsyncedConcepts(id:Int): List<QuoteConcepts>
 
+        @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0")
+        suspend fun getAllUnsyncedConcepts(): List<QuoteConcepts>
+
         // Actualizar el estado a 'Sincronizado' cuando Laravel confirme la recepción
+        @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE idLog = :idLog")
+        suspend fun updateSyncStatusByLog(idLog: Int)
+
         @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE quoteId = :id")
         suspend fun updateSyncStatus(id: Int)
 

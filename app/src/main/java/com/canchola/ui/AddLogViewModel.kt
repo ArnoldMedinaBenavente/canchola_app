@@ -17,28 +17,39 @@ class LogViewModel(application: Application,
                    private val repository: LogRepository)
                     : AndroidViewModel(application) {
 
-    fun saveLog(logEntry: LogEntry,photoPaths: List<String>) {
-        // Usamos viewModelScope para que la tarea viva aunque se cierre el BottomSheet
+    fun saveLog(logEntry: LogEntry, photoPaths: List<String>) {
         viewModelScope.launch(Dispatchers.IO) {
-           val isSynced= repository.saveAndSyncLog(logEntry, photoPaths = photoPaths)
+           val isSynced = repository.saveAndSyncLog(logEntry, photoPaths = photoPaths)
             withContext(Dispatchers.Main) {
                 if (isSynced) {
-                    Toast.makeText(getApplication(), "✅ Registrado con exito", Toast.LENGTH_LONG).show()
+                    Toast.makeText(getApplication(), "✅ Registrado con éxito", Toast.LENGTH_LONG).show()
                 } else {
-                    Toast.makeText(getApplication(), "💾 Registrado con exito", Toast.LENGTH_LONG).show()
+                    Toast.makeText(getApplication(), "💾 Registrado localmente (Sin internet)", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    fun syncPendingLogs() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val success = repository.syncAllUnsyncedLogs()
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    Toast.makeText(getApplication(), "✅ Sincronización completa", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(getApplication(), "❌ Error o sin conexión", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
     class Factory(
-        private val application: Application, // 1. Recibe application
-        private val repository: LogRepository  // 2. Recibe repository
+        private val application: Application,
+        private val repository: LogRepository
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(LogViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                // 3. Pasa ambos al constructor
                 return LogViewModel(application, repository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")

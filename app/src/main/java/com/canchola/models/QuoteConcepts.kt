@@ -16,4 +16,5 @@ data class QuoteConcepts (
     val createdAt: Long = System.currentTimeMillis(),
     val isSynced: Boolean = false,
     val idUser: Int?,
+    val logIdGenerated: Int? = null
 ): Serializable

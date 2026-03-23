@@ -9,6 +9,7 @@ data class LogEntry(
     val quoteId: Int? = null,       // El ID de la cotización (Laravel)
     val idConcept: String? = null,  // El ID del concepto vinculado
     val comment: String? = "Sin comentarios",
+    val cantidad: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val isSynced: Boolean = false, // false = pendiente de enviar a Laravel
     val needsNetworkWarning: Boolean = true

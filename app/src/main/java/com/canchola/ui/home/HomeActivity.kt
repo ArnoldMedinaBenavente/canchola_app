@@ -34,6 +34,7 @@ import com.canchola.ui.photo.Photos
 import com.canchola.ui.quotes.QuoteDetailActivity
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -268,72 +269,92 @@ class HomeActivity : AppCompatActivity() {
         }
 
         btnGuardar.setOnClickListener {
+            // 1. Mostrar diálogo de carga
+            val loadingDialog = MaterialAlertDialogBuilder(this@HomeActivity)
+                .setTitle("Procesando")
+                .setMessage("Enviando información, por favor espere...")
+                .setCancelable(false)
+                .show()
+            
+            btnGuardar.isEnabled = false // Desactivar el botón
+
             lifecycleScope.launch {
-                for (i in 0 until container.childCount) {
-                    val item = container.getChildAt(i)
-                    val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
-                    val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
-                    val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
-                    val comentario = item.findViewById<EditText>(R.id.etComentario).text.toString()
-                    val uris = dataMap[item] ?: emptyList<Uri>()
+                try {
+                    for (i in 0 until container.childCount) {
+                        val item = container.getChildAt(i)
+                        val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
+                        val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
+                        val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
+                        val comentario = item.findViewById<EditText>(R.id.etComentario).text.toString()
+                        val uris = dataMap[item] ?: emptyList<Uri>()
 
-                    var logIdGenerated: Int? = null
+                        var logIdGenerated: Int? = null
 
-                    // 1. Primero guardamos el LogEntry si hay evidencia (comentario o fotos)
-                    if (comentario.isNotEmpty() || uris.isNotEmpty()) {
-                        val insertedId = db.logEntryDao().insert(LogEntry(
-                            quoteId = quote.idQuote,
-                            idConcept = idConcept,
-                            comment = if(comentario.isEmpty()) "Avance de $nombre" else comentario,
-                            isSynced = false
-                        ))
-                        logIdGenerated = insertedId.toInt()
-
-                        // Guardar las Fotos vinculadas al LogEntry
-                        if (uris.isNotEmpty()) {
-                            val photosToInsert = uris.map { uri ->
-                                Photos(
-                                    logEntryId = logIdGenerated,
-                                    uri = uri.toString(),
-                                    isUploaded = false
+                        // 1. Primero guardamos el LogEntry si hay evidencia (comentario o fotos)
+                        if(cant.isNotEmpty() ) {
+                            val insertedId = db.logEntryDao().insert(
+                                LogEntry(
+                                    quoteId = quote.idQuote,
+                                    idConcept = idConcept,
+                                    comment = if (comentario.isEmpty()) "Registro de avance" else comentario,
+                                    cantidad = cant,
+                                    isSynced = false
                                 )
+                            )
+                            logIdGenerated = insertedId.toInt()
+
+
+                            // Guardar las Fotos vinculadas al LogEntry
+                            if (uris.isNotEmpty()) {
+                                val photosToInsert = uris.map { uri ->
+                                    Photos(
+                                        logEntryId = logIdGenerated,
+                                        uri = uri.toString(),
+                                        isUploaded = false
+                                    )
+                                }
+                                db.photoDao().insertPhotos(photosToInsert)
                             }
-                            db.photoDao().insertPhotos(photosToInsert)
                         }
-                    }
 
-                    // 2. Guardar el Avance (QuoteConcepts) vinculando el idLog
-                    if (cant.isNotEmpty()) {
-                        val newConcept = QuoteConcepts(
-                            idConcept = idConcept,
-                            quoteId = quote?.idQuote,
-                            nameConcept = nombre,
-                            cantConcept = cant,
-                            comment = if(comentario.isNotEmpty()) comentario else null,
-                            idLog = logIdGenerated, // VÍNCULO DIRECTO
-                            isSynced = false,
-                            idUser = currentUserId
-                        )
-                        db.quoteConceptDao().insert(newConcept)
+//                        // 2. Guardar el Avance (QuoteConcepts) vinculando el idLog
+//                        if (cant.isNotEmpty()) {
+//                            val newConcept = QuoteConcepts(
+//                                idConcept = idConcept,
+//                                quoteId = quote?.idQuote,
+//                                nameConcept = nombre,
+//                                cantConcept = cant,
+//                                comment = if(comentario.isNotEmpty()) comentario else null,
+//                                idLog = logIdGenerated, // VÍNCULO DIRECTO
+//                                isSynced = false,
+//                                idUser = currentUserId,
+//                                logIdGenerated = logIdGenerated
+//                            )
+//                            db.quoteConceptDao().insert(newConcept)
+//                        }
                     }
-                }
-                
-                val repoitoryQuoteConcepts = QuoteConceptRepository(
-                    quote, sessionManager.getUserId(), db.quoteConceptDao(), apiService, this@HomeActivity
-                )
-                val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote)
-                val isSynced = repoitoryQuoteConcepts.SyncConcepts(quoteConceptsList)
+                    
+                    val repoitoryQuoteConcepts = QuoteConceptRepository(
+                        quote, sessionManager.getUserId(), db.quoteConceptDao(),db.logEntryDao(),db.photoDao(), apiService, this@HomeActivity
+                    )
+                    val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote)
+                    val isSynced = repoitoryQuoteConcepts.SyncConcepts(quoteConceptsList)
 
-                if (isSynced) {
-                    Toast.makeText(this@HomeActivity, "✅ Enviado exitosamente", Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(this@HomeActivity, "💾 Guardado localmente ", Toast.LENGTH_LONG).show()
+                    if (isSynced) {
+                        Toast.makeText(this@HomeActivity, "✅ Enviado exitosamente", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@HomeActivity, "💾 Guardado localmente ", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    Log.e("SAVE_ERROR", "Error: ${e.message}")
+                    Toast.makeText(this@HomeActivity, "❌ Error al procesar datos", Toast.LENGTH_SHORT).show()
+                } finally {
+                    // 2. Ocultar diálogo y cerrar el formulario al terminar
+                    loadingDialog.dismiss()
+                    currentEditingUriList = null
+                    currentEditingAdapter = null
+                    dialog.dismiss()
                 }
-                
-                // Limpiar referencias
-                currentEditingUriList = null
-                currentEditingAdapter = null
-                dialog.dismiss()
             }
         }
         dialog.show()

@@ -97,6 +97,7 @@ class AddLogSheet(val quoteId: Int? = null,val type:String?) : BottomSheetDialog
                 val newLog = LogEntry(
                     quoteId = quoteId,
                     comment = comment,
+                    cantidad = "Solo comentario",
                 //    photoUri = if (photoPaths.isNotEmpty()) photoPaths[0] else null, // Temporal: solo guarda la primera
                     isSynced = false
                 )

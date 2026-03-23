@@ -1,86 +1,185 @@
 package com.canchola.data.repository
 
-
-
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory.*
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
+import android.util.Log
+import com.canchola.data.local.db.LogEntryDao
+import com.canchola.data.local.db.PhotoDao
 import com.canchola.data.local.db.QuoteConceptDao
 import com.canchola.data.remote.ApiService
 import com.canchola.models.DateHelper
+import com.canchola.models.LogEntry
 import com.canchola.models.Quote
 import com.canchola.models.QuoteConcepts
+import com.canchola.ui.photo.Photos
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
 import java.io.File
-import java.io.FileOutputStream
 
 class QuoteConceptRepository(
     private val quote: Quote?,
-    private val userId:Int,
+    private val userId: Int,
     private val quoteConceptDao: QuoteConceptDao,
+    private val logEntryDao: LogEntryDao,
+    private val photoDao: PhotoDao,
     private val apiService: ApiService,
     private val context: Context
 ) {
     // Flow para observar todos los logs desde la UI
-    val allLogs: Flow<List<QuoteConcepts>> = quoteConceptDao.getAllLConcepts()
+    val allLogs: Flow<List<LogEntry>> = logEntryDao.getAllLogs()
 
-    suspend fun SyncConcepts( quoteConcepts: List<QuoteConcepts>): Boolean {
+    suspend fun SyncConcepts(quoteConcepts: List<QuoteConcepts>): Boolean {
         return withContext(Dispatchers.IO) {
-            val currentQuoteId = quote?.idQuote ?: 0
-
-            if (isNetworkAvailable(context)) {
-                try {
-                    val response = uploadToLaravel(currentQuoteId, userId,quoteConcepts, DateHelper.getCurrentDateForServer() )
-                    if (response.isSuccessful) {
-
-                        quoteConceptDao.updateSyncStatus(currentQuoteId)
-
-                        return@withContext true // Éxito total
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            if (!isNetworkAvailable(context)) {
+                return@withContext false
             }
 
-            showOfflineNotification()
-            return@withContext false // Solo se guardó localmente
+            try {
+                var allSuccess = true
+                val currentQuoteId = quote?.idQuote ?: 0
+
+                // 1. Sincronizar Conceptos de esta cotización
+                if (quoteConcepts.isNotEmpty()) {
+                    val response = uploadToLaravel(currentQuoteId, userId, quoteConcepts, DateHelper.getCurrentDateForServer())
+                    if (response.isSuccessful && response.body()?.status == "success") {
+                        quoteConceptDao.updateSyncStatus(currentQuoteId)
+                    } else {
+                        allSuccess = false
+                    }
+                }
+
+                // 2. Sincronizar Logs pendientes (Bitácoras) de esta cotización
+                val unsyncedLogs = logEntryDao.getUnsyncedLogs().filter { it.quoteId == currentQuoteId }
+                for (log in unsyncedLogs) {
+                    val photos = photoDao.getUnsyncedPhotosByLog(log.id)
+                    val logResponse = uploadLogWithPhotos(log, photos)
+
+                    if (logResponse.isSuccessful && logResponse.body()?.status == "success") {
+                        logEntryDao.updateSyncStatus(log.id)
+                        photoDao.markPhotosAsUploaded(log.id)
+                        // También actualizar el concepto asociado si existe
+                        quoteConceptDao.updateSyncStatusByLog(log.id)
+                    } else {
+                        allSuccess = false
+                    }
+                }
+
+                return@withContext allSuccess
+            } catch (e: Exception) {
+                Log.e("SYNC_ERROR", "Error en SyncConcepts: ${e.message}")
+                return@withContext false
+            }
         }
     }
 
-    private suspend fun uploadToLaravel(quoteId: Int?, // Suponiendo que son Int, ajústalos a tus tipos reales
-                                        userId: Int?,
-                                        quoteConcepts: List<QuoteConcepts>,
-                                        createdAt: String?
-    ): Response<ApiService.GenericResponse> {
+    suspend fun syncAllUnsyncedData(): Boolean {
+        return withContext(Dispatchers.IO) {
+            if (!isNetworkAvailable(context)) return@withContext false
 
-        // 1. Convertimos la lista completa a un String en formato JSON
+            try {
+                var allSuccess = true
+
+                // 1. Sincronizar TODOS los Conceptos pendientes
+                val allUnsyncedConcepts = quoteConceptDao.getAllUnsyncedConcepts()
+                if (allUnsyncedConcepts.isNotEmpty()) {
+                    val groupedByQuote = allUnsyncedConcepts.groupBy { it.quoteId }
+                    for ((qId, concepts) in groupedByQuote) {
+                        if (qId == null) continue
+                        val response = uploadToLaravel(qId, userId, concepts, DateHelper.getCurrentDateForServer())
+                        if (response.isSuccessful && response.body()?.status == "success") {
+                            quoteConceptDao.updateSyncStatus(qId)
+                        } else {
+                            allSuccess = false
+                        }
+                    }
+                }
+
+                // 2. Sincronizar TODOS los Logs pendientes
+                val allUnsyncedLogs = logEntryDao.getUnsyncedLogs()
+                for (log in allUnsyncedLogs) {
+                    val photos = photoDao.getUnsyncedPhotosByLog(log.id)
+                    val logResponse = uploadLogWithPhotos(log, photos)
+
+                    if (logResponse.isSuccessful && logResponse.body()?.status == "success") {
+                        logEntryDao.updateSyncStatus(log.id)
+                        photoDao.markPhotosAsUploaded(log.id)
+                        quoteConceptDao.updateSyncStatusByLog(log.id)
+                    } else {
+                        allSuccess = false
+                    }
+                }
+
+                return@withContext allSuccess
+            } catch (e: Exception) {
+                Log.e("SYNC_ALL_ERROR", "Error en syncAllUnsyncedData: ${e.message}")
+                return@withContext false
+            }
+        }
+    }
+
+    private suspend fun uploadToLaravel(
+        quoteId: Int?,
+        userId: Int?,
+        quoteConcepts: List<QuoteConcepts>,
+        createdAt: String?
+    ): Response<ApiService.GenericResponse> {
         val gson = Gson()
         val conceptsJsonString = gson.toJson(quoteConcepts)
-
-        // 2. Empaquetamos el JSON indicando el tipo correcto (application/json)
         val conceptsPart = conceptsJsonString.toRequestBody("application/json".toMediaTypeOrNull())
-
-        // 3. Empaquetamos los demás parámetros (manejando los posibles nulos de forma segura)
         val quoteIdPart = quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val userIdPart = userId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val createdAtPart = createdAt?.toRequestBody("text/plain".toMediaTypeOrNull())
 
-        // 4. Llamamos a Retrofit
         return apiService.uploadQuoteConcept(
             quoteId = quoteIdPart,
             concepts = conceptsPart,
             userId = userIdPart,
             created_at_app = createdAtPart
         )
+    }
 
+    private suspend fun uploadLogWithPhotos(
+        log: LogEntry,
+        photos: List<Photos>
+    ): Response<ApiService.GenericResponse> {
+        val commentPart = (log.comment ?: "").toRequestBody("text/plain".toMediaTypeOrNull())
+        val quoteIdPart = log.quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val idConceptPart = log.idConcept?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val createdAtPart = DateHelper.formatLongToDate(log.createdAt).toRequestBody("text/plain".toMediaTypeOrNull())
+        val amountPart = log.cantidad?.toRequestBody("text/plain".toMediaTypeOrNull())
+
+        val photoParts = photos.mapNotNull { photo ->
+            try {
+                val uri = Uri.parse(photo.uri)
+                val path = uri.path ?: return@mapNotNull null
+                val file = File(path)
+                if (file.exists()) {
+                    val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                    MultipartBody.Part.createFormData("photos[]", file.name, requestFile)
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        return apiService.uploadLogEntry(
+            comment = commentPart,
+            quoteId = quoteIdPart,
+            idConcept = idConceptPart,
+            amount = amountPart,
+            photos = photoParts,
+            created_at_app = createdAtPart
+        )
     }
 
     private fun isNetworkAvailable(context: Context): Boolean {
@@ -89,12 +188,4 @@ class QuoteConceptRepository(
         val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
         return activeNetwork.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
-
-    private fun showOfflineNotification() {
-        // Aquí va tu lógica para disparar la notificación de "Información pendiente de enviar"
-        // Puedes usar un NotificationManager básico
-    }
-
-    // Función rápida para comprimir antes de crear el RequestBody
-
 }
