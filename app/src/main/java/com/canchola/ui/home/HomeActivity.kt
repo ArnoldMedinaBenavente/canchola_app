@@ -2,6 +2,8 @@ package com.canchola.ui.home
 
 import QuotesAdapter
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -35,6 +37,7 @@ import com.canchola.ui.quotes.QuoteDetailActivity
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -85,6 +88,7 @@ class HomeActivity : AppCompatActivity() {
         setupRecyclerView()
         setupListeners()
         loadQuotes()
+        updateSyncBadge()
         sessionManager = SessionManager(this)
          currentUserId = sessionManager.getUserId()
     }
@@ -158,6 +162,7 @@ class HomeActivity : AppCompatActivity() {
         // Botón Actualizar
         binding.btnRefresh.setOnClickListener {
             loadQuotes() // Llama a la función que trae los datos de Laravel
+            updateSyncBadge()
             Toast.makeText(this, "Actualizando...", Toast.LENGTH_SHORT).show()
         }
 
@@ -171,6 +176,89 @@ class HomeActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
         }
+
+        // Botón Sincronizar Todo (Campanita)
+        binding.btnSyncAll.setOnClickListener {
+            checkAndSyncAll()
+        }
+    }
+
+    private fun checkAndSyncAll() {
+        lifecycleScope.launch {
+            val unsyncedLogs = db.logEntryDao().getUnsyncedLogs()
+            val unsyncedPhotos = db.photoDao().getUnsyncedPhotos()
+            val unsyncedConcepts = db.quoteConceptDao().getAllUnsyncedConcepts()
+            
+            val totalComments = unsyncedLogs.size + unsyncedConcepts.size
+            val totalPhotos = unsyncedPhotos.size
+            
+            if (totalComments == 0 && totalPhotos == 0) {
+                MaterialAlertDialogBuilder(this@HomeActivity)
+                    .setTitle("Al día")
+                    .setMessage("Todo está sincronizado. No hay notas ni fotos pendientes de enviar.")
+                    .setPositiveButton("Cerrar", null)
+                    .show()
+            } else {
+                MaterialAlertDialogBuilder(this@HomeActivity)
+                    .setTitle("Pendientes de enviar")
+                    .setMessage("Notas por enviar: $totalComments\nFotos por enviar: $totalPhotos")
+                    .setPositiveButton("Enviar Todo") { _, _ ->
+                        performSyncAll()
+                    }
+                    .setNegativeButton("Más tarde", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun performSyncAll() {
+        val loading = MaterialAlertDialogBuilder(this)
+            .setTitle("Sincronizando")
+            .setMessage("Enviando todos los datos pendientes...")
+            .setCancelable(false)
+            .show()
+
+        lifecycleScope.launch {
+            try {
+                val repository = QuoteConceptRepository(
+                    null, currentUserId ?: 0, db.quoteConceptDao(), db.logEntryDao(), db.photoDao(), apiService, this@HomeActivity
+                )
+                val success = repository.syncAllUnsyncedData()
+                if (success) {
+                    Toast.makeText(this@HomeActivity, "✅ Todo sincronizado correctamente", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@HomeActivity, "⚠️ Algunos datos no se pudieron enviar", Toast.LENGTH_LONG).show()
+                }
+                updateSyncBadge()
+            } catch (e: Exception) {
+                Toast.makeText(this@HomeActivity, "❌ Error al sincronizar", Toast.LENGTH_SHORT).show()
+            } finally {
+                loading.dismiss()
+            }
+        }
+    }
+
+    private fun updateSyncBadge() {
+        lifecycleScope.launch {
+            val unsyncedLogsCount = db.logEntryDao().getUnsyncedLogs().size
+            val unsyncedConceptsCount = db.quoteConceptDao().getAllUnsyncedConcepts().size
+            val unsyncedPhotosCount = db.photoDao().getUnsyncedPhotos().size
+            val total = unsyncedLogsCount + unsyncedConceptsCount + unsyncedPhotosCount
+            
+            if (total > 0) {
+                binding.tvSyncBadge.text = total.toString()
+                binding.tvSyncBadge.visibility = View.VISIBLE
+               // binding.ivBell.imageTintList = ColorStateList.valueOf(Color.parseColor("#007AFF")) // Azul
+            } else {
+                binding.tvSyncBadge.visibility = View.GONE
+               // binding.ivBell.imageTintList = ColorStateList.valueOf(Color.GRAY) // Gris
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateSyncBadge()
     }
 
     private fun showQuoteOptions(quote: Quote) {
@@ -200,6 +288,8 @@ class HomeActivity : AppCompatActivity() {
         view.findViewById<TextView>(R.id.btnAddPhoto).setOnClickListener {
             dialog.dismiss()
             // Aquí podrías manejar fotos generales de la cotización si fuera necesario
+            val sheet = AddLogSheet(quoteId = quote.idQuote,"photo") // Pasas el ID
+            sheet.show(supportFragmentManager, "AddLog")
         }
 
         dialog.setContentView(view)
@@ -291,18 +381,15 @@ class HomeActivity : AppCompatActivity() {
                         var logIdGenerated: Int? = null
 
                         // 1. Primero guardamos el LogEntry si hay evidencia (comentario o fotos)
-                        if(cant.isNotEmpty() ) {
-                            val insertedId = db.logEntryDao().insert(
-                                LogEntry(
-                                    quoteId = quote.idQuote,
-                                    idConcept = idConcept,
-                                    comment = if (comentario.isEmpty()) "Registro de avance" else comentario,
-                                    cantidad = cant,
-                                    isSynced = false
-                                )
-                            )
+                        if (comentario.isNotEmpty() || uris.isNotEmpty() || cant.isNotEmpty()) {
+                            val insertedId = db.logEntryDao().insert(LogEntry(
+                                quoteId = quote.idQuote,
+                                idConcept = idConcept,
+                                comment = if(comentario.isEmpty()) "Avance de $nombre" else comentario,
+                                cantidad = cant,
+                                isSynced = false
+                            ))
                             logIdGenerated = insertedId.toInt()
-
 
                             // Guardar las Fotos vinculadas al LogEntry
                             if (uris.isNotEmpty()) {
@@ -317,21 +404,21 @@ class HomeActivity : AppCompatActivity() {
                             }
                         }
 
-//                        // 2. Guardar el Avance (QuoteConcepts) vinculando el idLog
-//                        if (cant.isNotEmpty()) {
-//                            val newConcept = QuoteConcepts(
-//                                idConcept = idConcept,
-//                                quoteId = quote?.idQuote,
-//                                nameConcept = nombre,
-//                                cantConcept = cant,
-//                                comment = if(comentario.isNotEmpty()) comentario else null,
-//                                idLog = logIdGenerated, // VÍNCULO DIRECTO
-//                                isSynced = false,
-//                                idUser = currentUserId,
-//                                logIdGenerated = logIdGenerated
-//                            )
-//                            db.quoteConceptDao().insert(newConcept)
-//                        }
+                        // 2. Guardar el Avance (QuoteConcepts) vinculando el idLog
+                        if (cant.isNotEmpty()) {
+                            val newConcept = QuoteConcepts(
+                                idConcept = idConcept,
+                                quoteId = quote?.idQuote,
+                                nameConcept = nombre,
+                                cantConcept = cant,
+                                comment = if(comentario.isNotEmpty()) comentario else null,
+                                idLog = logIdGenerated, // VÍNCULO DIRECTO
+                                isSynced = false,
+                                idUser = currentUserId,
+                                logIdGenerated = logIdGenerated
+                            )
+                            db.quoteConceptDao().insert(newConcept)
+                        }
                     }
                     
                     val repoitoryQuoteConcepts = QuoteConceptRepository(
@@ -353,6 +440,7 @@ class HomeActivity : AppCompatActivity() {
                     loadingDialog.dismiss()
                     currentEditingUriList = null
                     currentEditingAdapter = null
+                    updateSyncBadge()
                     dialog.dismiss()
                 }
             }

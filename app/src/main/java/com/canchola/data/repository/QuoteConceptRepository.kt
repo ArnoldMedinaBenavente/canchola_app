@@ -35,22 +35,26 @@ class QuoteConceptRepository(
     private val apiService: ApiService,
     private val context: Context
 ) {
-    // Flow para observar todos los logs desde la UI
     val allLogs: Flow<List<LogEntry>> = logEntryDao.getAllLogs()
 
     suspend fun SyncConcepts(quoteConcepts: List<QuoteConcepts>): Boolean {
         return withContext(Dispatchers.IO) {
-            if (!isNetworkAvailable(context)) {
-                return@withContext false
-            }
+            if (!isNetworkAvailable(context)) return@withContext false
 
             try {
                 var allSuccess = true
                 val currentQuoteId = quote?.idQuote ?: 0
 
-                // 1. Sincronizar Conceptos de esta cotización
                 if (quoteConcepts.isNotEmpty()) {
-                    val response = uploadToLaravel(currentQuoteId, userId, quoteConcepts, DateHelper.getCurrentDateForServer())
+                    val firstConcept = quoteConcepts.firstOrNull()
+                    val response = uploadToLaravel(
+                        currentQuoteId, 
+                        userId, 
+                        quoteConcepts, 
+                        DateHelper.getCurrentDateForServer(),
+                        firstConcept?.latitude,
+                        firstConcept?.longitude
+                    )
                     if (response.isSuccessful && response.body()?.status == "success") {
                         quoteConceptDao.updateSyncStatus(currentQuoteId)
                     } else {
@@ -58,7 +62,6 @@ class QuoteConceptRepository(
                     }
                 }
 
-                // 2. Sincronizar Logs pendientes (Bitácoras) de esta cotización
                 val unsyncedLogs = logEntryDao.getUnsyncedLogs().filter { it.quoteId == currentQuoteId }
                 for (log in unsyncedLogs) {
                     val photos = photoDao.getUnsyncedPhotosByLog(log.id)
@@ -67,7 +70,6 @@ class QuoteConceptRepository(
                     if (logResponse.isSuccessful && logResponse.body()?.status == "success") {
                         logEntryDao.updateSyncStatus(log.id)
                         photoDao.markPhotosAsUploaded(log.id)
-                        // También actualizar el concepto asociado si existe
                         quoteConceptDao.updateSyncStatusByLog(log.id)
                     } else {
                         allSuccess = false
@@ -89,13 +91,20 @@ class QuoteConceptRepository(
             try {
                 var allSuccess = true
 
-                // 1. Sincronizar TODOS los Conceptos pendientes
                 val allUnsyncedConcepts = quoteConceptDao.getAllUnsyncedConcepts()
                 if (allUnsyncedConcepts.isNotEmpty()) {
                     val groupedByQuote = allUnsyncedConcepts.groupBy { it.quoteId }
                     for ((qId, concepts) in groupedByQuote) {
                         if (qId == null) continue
-                        val response = uploadToLaravel(qId, userId, concepts, DateHelper.getCurrentDateForServer())
+                        val firstConcept = concepts.firstOrNull()
+                        val response = uploadToLaravel(
+                            qId, 
+                            userId, 
+                            concepts, 
+                            DateHelper.getCurrentDateForServer(),
+                            firstConcept?.latitude,
+                            firstConcept?.longitude
+                        )
                         if (response.isSuccessful && response.body()?.status == "success") {
                             quoteConceptDao.updateSyncStatus(qId)
                         } else {
@@ -104,7 +113,6 @@ class QuoteConceptRepository(
                     }
                 }
 
-                // 2. Sincronizar TODOS los Logs pendientes
                 val allUnsyncedLogs = logEntryDao.getUnsyncedLogs()
                 for (log in allUnsyncedLogs) {
                     val photos = photoDao.getUnsyncedPhotosByLog(log.id)
@@ -131,7 +139,9 @@ class QuoteConceptRepository(
         quoteId: Int?,
         userId: Int?,
         quoteConcepts: List<QuoteConcepts>,
-        createdAt: String?
+        createdAt: String?,
+        latitude: Double?,
+        longitude: Double?
     ): Response<ApiService.GenericResponse> {
         val gson = Gson()
         val conceptsJsonString = gson.toJson(quoteConcepts)
@@ -139,12 +149,17 @@ class QuoteConceptRepository(
         val quoteIdPart = quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val userIdPart = userId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val createdAtPart = createdAt?.toRequestBody("text/plain".toMediaTypeOrNull())
+        
+        val latPart = latitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val lonPart = longitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
 
         return apiService.uploadQuoteConcept(
             quoteId = quoteIdPart,
             concepts = conceptsPart,
             userId = userIdPart,
-            created_at_app = createdAtPart
+            created_at_app = createdAtPart,
+            latitude = latPart,
+            longitude = lonPart
         )
     }
 
@@ -155,8 +170,11 @@ class QuoteConceptRepository(
         val commentPart = (log.comment ?: "").toRequestBody("text/plain".toMediaTypeOrNull())
         val quoteIdPart = log.quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val idConceptPart = log.idConcept?.toRequestBody("text/plain".toMediaTypeOrNull())
-        val createdAtPart = DateHelper.formatLongToDate(log.createdAt).toRequestBody("text/plain".toMediaTypeOrNull())
+        val createdAtPart = log.createdAt.toString().toRequestBody("text/plain".toMediaTypeOrNull())
         val amountPart = log.cantidad?.toRequestBody("text/plain".toMediaTypeOrNull())
+        
+        val latitudePart = log.latitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val longitudePart = log.longitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
 
         val photoParts = photos.mapNotNull { photo ->
             try {
@@ -178,7 +196,9 @@ class QuoteConceptRepository(
             idConcept = idConceptPart,
             amount = amountPart,
             photos = photoParts,
-            created_at_app = createdAtPart
+            created_at_app = createdAtPart,
+            latitude = latitudePart,
+            longitude = longitudePart
         )
     }
 

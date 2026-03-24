@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ios_bg"
+    android:background="#F2F2F7"
     android:orientation="vertical">
 
     <RelativeLayout
@@ -13,14 +13,24 @@
         android:paddingTop="20dp"
         android:paddingBottom="10dp">
 
+        <ImageView
+            android:id="@+id/ivAppLogo"
+            android:layout_width="45dp"
+            android:layout_height="45dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:src="@mipmap/logo" />
+
         <TextView
             android:id="@+id/tvTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignParentStart="true"
-            android:text="Operaciones"
+            android:layout_toEndOf="@id/ivAppLogo"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="12dp"
+            android:text=""
             android:textColor="@android:color/darker_gray"
-            android:textSize="32sp"
+            android:textSize="26sp"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -28,7 +38,32 @@
             android:layout_height="wrap_content"
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <FrameLayout
+                android:id="@+id/btnSyncAll"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="15dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="4dp">
+
+                <TextView
+                    android:id="@+id/tvSyncBadge"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="@android:drawable/presence_online"
+                    android:backgroundTint="#FF3B30"
+                    android:gravity="center"
+                    android:text="0"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </FrameLayout>
 
             <ImageButton
                 android:id="@+id/btnRefresh"
@@ -37,7 +72,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/stat_notify_sync"
                 android:layout_marginEnd="10dp"
-                app:tint="@color/ios_blue" />
+                app:tint="#007AFF" />
 
             <ImageButton
                 android:id="@+id/btnLogout"
@@ -48,8 +83,6 @@
                 app:tint="#FF3B30" />
         </LinearLayout>
     </RelativeLayout>
-
-
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvQuotes"

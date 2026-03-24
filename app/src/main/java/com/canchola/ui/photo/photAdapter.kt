@@ -9,11 +9,11 @@ import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 import com.canchola.R
 
-// Asegúrate de importar tu R correctamente según el paquete de tu app
-
 class PhotoAdapter(
-    private val photoList: MutableList<Uri>, // Lista de URIs de las fotos
-    private val onDeleteClick: (Int) -> Unit // Función lambda para manejar el borrado
+    private val photoList: MutableList<Uri>,
+    private val isReadOnly: Boolean = false,
+    private val onPhotoClick: ((Uri) -> Unit)? = null,
+    private val onDeleteClick: ((Int) -> Unit)? = null
 ) : RecyclerView.Adapter<PhotoAdapter.PhotoViewHolder>() {
 
     inner class PhotoViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -29,17 +29,24 @@ class PhotoAdapter(
     override fun onBindViewHolder(holder: PhotoViewHolder, position: Int) {
         val imageUri = photoList[position]
 
-        // USAR GLIDE EN LUGAR DE setImageURI
         com.bumptech.glide.Glide.with(holder.itemView.context)
             .load(imageUri)
-            .centerCrop() // Esto hace que se vea bien en el cuadro sin deformarse
-            .placeholder(android.R.drawable.ic_menu_report_image) // Icono temporal
-            .error(android.R.drawable.stat_notify_error) // Icono si falla
+            .centerCrop()
+            .placeholder(android.R.drawable.ic_menu_report_image)
+            .error(android.R.drawable.stat_notify_error)
             .into(holder.imgPhoto)
 
-        // Configurar el botón de eliminar
-        holder.btnRemove.setOnClickListener {
-            onDeleteClick(position)
+        if (isReadOnly) {
+            holder.btnRemove.visibility = View.GONE
+        } else {
+            holder.btnRemove.visibility = View.VISIBLE
+            holder.btnRemove.setOnClickListener {
+                onDeleteClick?.invoke(position)
+            }
+        }
+
+        holder.imgPhoto.setOnClickListener {
+            onPhotoClick?.invoke(imageUri)
         }
     }
 

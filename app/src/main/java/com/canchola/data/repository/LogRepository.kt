@@ -110,8 +110,13 @@ class LogRepository(
         val commentPart = (log.comment ?: "").toRequestBody("text/plain".toMediaTypeOrNull())
         val quoteIdPart = log.quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val idConceptPart = log.idConcept?.toRequestBody("text/plain".toMediaTypeOrNull())
-        val createdAtPart = DateHelper.formatLongToDate(log.createdAt).toRequestBody("text/plain".toMediaTypeOrNull())
+        // ENVIAR COMO MILISEGUNDOS PARA LARAVEL (Carbon::createFromTimestampMs)
+        val createdAtPart = log.createdAt.toString().toRequestBody("text/plain".toMediaTypeOrNull())
         val amountPart = log.cantidad?.toRequestBody("text/plain".toMediaTypeOrNull())
+        
+        // GEO-ETIQUETADO
+        val latitudePart = log.latitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val longitudePart = log.longitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
 
         return apiService.uploadLogEntry(
             comment = commentPart,
@@ -119,7 +124,9 @@ class LogRepository(
             idConcept = idConceptPart,
             amount = amountPart,
             photos = photoParts,
-            created_at_app = createdAtPart
+            created_at_app = createdAtPart,
+            latitude = latitudePart,
+            longitude = longitudePart
         )
     }
 

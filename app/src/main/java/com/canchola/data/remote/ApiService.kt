@@ -19,30 +19,29 @@ interface ApiService {
     @GET("quotes")
     suspend fun getQuotes(): Response<List<Quote>>
 
-    //LOGeNTRI COMENTARIOS Y FOTOS
-        @Multipart
-        @POST("create/logEntries") // Ajusta esta ruta según tus rutas en Laravel
-        suspend fun uploadLogEntry(
+    @Multipart
+    @POST("create/logEntries")
+    suspend fun uploadLogEntry(
         @Part("comment") comment: RequestBody,
         @Part("quote_id") quoteId: RequestBody?,
-        @Part("id_concept") idConcept: RequestBody?,// Puede ser null si es general
-        @Part("amount_app") amount: RequestBody?,// Puede ser null si es general
-        @Part photos: List<MultipartBody.Part>,        // Puede ser null si no hay foto
-        @Part ("created_at") created_at_app: RequestBody?        // Puede ser null si no hay foto
-        ): Response<GenericResponse>
-
-    //LOGeNTRI COMENTARIOS Y FOTOS
+        @Part("id_concept") idConcept: RequestBody?,
+        @Part("amount_app") amount: RequestBody?,
+        @Part photos: List<MultipartBody.Part>,
+        @Part("created_at") created_at_app: RequestBody?,
+        @Part("latitude") latitude: RequestBody?,
+        @Part("longitude") longitude: RequestBody?
+    ): Response<GenericResponse>
 
     @Multipart
-        @POST("create/quoteConcept") // Ajusta esta ruta según tus rutas en Laravel
+    @POST("create/quoteConcept")
     suspend fun uploadQuoteConcept(
-
-        @Part("quote_id") quoteId: RequestBody?, // Puede ser null si es general
+        @Part("quote_id") quoteId: RequestBody?,
         @Part("concepts") concepts: RequestBody,
-        @Part("idUser") userId: RequestBody?, // Puede ser null si es general
-        @Part("created_at") created_at_app: RequestBody?,        // Puede ser null si no hay foto
-
+        @Part("idUser") userId: RequestBody?,
+        @Part("created_at") created_at_app: RequestBody?,
+        @Part("latitude") latitude: RequestBody?,
+        @Part("longitude") longitude: RequestBody?
     ): Response<GenericResponse>
-    // Clase para recibir mensajes de éxito de tu ERP (ej: {"message": "Guardado"})
-    data class GenericResponse(val message: String, val status: String) // Cambiado status a String
+
+    data class GenericResponse(val message: String, val status: String)
 }

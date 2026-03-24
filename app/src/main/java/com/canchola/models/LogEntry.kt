@@ -6,11 +6,13 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "log_entries")
 data class LogEntry(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val quoteId: Int? = null,       // El ID de la cotización (Laravel)
-    val idConcept: String? = null,  // El ID del concepto vinculado
+    val quoteId: Int? = null,
+    val idConcept: String? = null,
     val comment: String? = "Sin comentarios",
     val cantidad: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val isSynced: Boolean = false, // false = pendiente de enviar a Laravel
-    val needsNetworkWarning: Boolean = true
+    val isSynced: Boolean = false,
+    val needsNetworkWarning: Boolean = true,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )

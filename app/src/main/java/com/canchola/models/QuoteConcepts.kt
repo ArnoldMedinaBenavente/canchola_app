@@ -11,10 +11,12 @@ data class QuoteConcepts (
     val quoteId: Int?,
     val nameConcept: String?,
     val cantConcept: String?,
-    val comment: String? = null,    // Agregamos el comentario directamente aquí
-    val idLog: Int? = null,         // Y opcionalmente el ID de la bitácora vinculada
+    val comment: String? = null,
+    val idLog: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val isSynced: Boolean = false,
     val idUser: Int?,
-    val logIdGenerated: Int? = null
+    val logIdGenerated: Int? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 ): Serializable

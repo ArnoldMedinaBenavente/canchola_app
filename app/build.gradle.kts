@@ -99,5 +99,7 @@ dependencies {
     implementation("androidx.room:room-ktx:$room_version")
     kapt("androidx.room:room-compiler:$room_version")
 
+    // Google Play Services para Ubicación
+    implementation("com.google.android.gms:play-services-location:21.2.0")
 
 }

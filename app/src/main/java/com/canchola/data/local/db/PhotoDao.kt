@@ -22,4 +22,7 @@ interface PhotoDao {
 
     @Query("UPDATE photos SET isUploaded = 1 WHERE logEntryId = :idLog")
     suspend fun markPhotosAsUploaded(idLog: Int)
+
+    @Query("SELECT p.* FROM photos p INNER JOIN log_entries l ON p.logEntryId = l.id WHERE l.quoteId = :qId")
+    suspend fun getPhotosByQuote(qId: Int): List<Photos>
 }
