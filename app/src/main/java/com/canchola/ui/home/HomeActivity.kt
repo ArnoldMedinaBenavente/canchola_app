@@ -1,21 +1,28 @@
 package com.canchola.ui.home
 
 import QuotesAdapter
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.speech.RecognizerIntent
 import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -34,6 +41,8 @@ import com.canchola.ui.AddLogSheet
 import com.canchola.ui.photo.PhotoAdapter
 import com.canchola.ui.photo.Photos
 import com.canchola.ui.quotes.QuoteDetailActivity
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -63,6 +72,10 @@ class HomeActivity : AppCompatActivity() {
     private var currentPhotoUri: Uri? = null
     private var currentPhotoAbsolutePath: String? = null
 
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var lastLat: Double? = null
+    private var lastLon: Double? = null
+
     private val takePhotoLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success && currentPhotoUri != null) {
             currentPhotoAbsolutePath?.let { path ->
@@ -76,13 +89,35 @@ class HomeActivity : AppCompatActivity() {
             }
         }
     }
+    private var activeEditText: EditText? = null
+    private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0)
+            spokenText?.let {
+                val currentText = activeEditText?.text.toString()
+                if (currentText.isEmpty()) {
+                    activeEditText?.setText(it)
+                } else {
+                    activeEditText?.setText("$currentText $it")
+                }
+            }
+        }
+    }
 
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+            getLastLocation()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        checkLocationPermissions()
         // Inicializas la base de datos
         db = AppDatabase.getDatabase(this)
         setupRecyclerView()
@@ -91,6 +126,24 @@ class HomeActivity : AppCompatActivity() {
         updateSyncBadge()
         sessionManager = SessionManager(this)
          currentUserId = sessionManager.getUserId()
+    }
+
+    private fun checkLocationPermissions() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        } else {
+            getLastLocation()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun getLastLocation() {
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                lastLat = location.latitude
+                lastLon = location.longitude
+            }
+        }
     }
 
     private fun setupRecyclerView() {
@@ -327,7 +380,8 @@ class HomeActivity : AppCompatActivity() {
                     val btnAgregarComentario = itemView.findViewById<Button>(R.id.btnAgregarComentario)
                     val rvPhotos = itemView.findViewById<RecyclerView>(R.id.rvPhotosHome)
                     val etComentario = itemView.findViewById<EditText>(R.id.etComentario)
-                    
+                    val layoutComentarioVoz = itemView.findViewById<View>(R.id.layoutComentarioVoz) // <--- BUSCA EL PADRE
+                    val btnVoice = itemView.findViewById<ImageButton>(R.id.btnVoiceAlcance)
                     // --- NUEVO: Cada concepto tiene su propia lista de  y su propio adaptador ---
                     val itemUriList = mutableListOf<Uri>()
                     dataMap[itemView] = itemUriList
@@ -347,12 +401,22 @@ class HomeActivity : AppCompatActivity() {
 
                     container.addView(itemView)
                     btnAgregarComentario.setOnClickListener {
-                        etComentario.visibility = if(etComentario.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                        if (layoutComentarioVoz.visibility == View.VISIBLE) {
+                            layoutComentarioVoz.visibility = View.GONE
+                        } else {
+                            layoutComentarioVoz.visibility = View.VISIBLE
+                          //  etComentario.requestFocus() // Opcional: enfocar para escribir de una vez
+                        }
+
                     }
                     btnAgregarFoto.setOnClickListener {
                         currentEditingUriList = itemUriList
                         currentEditingAdapter = itemPhotoAdapter
                         openCamera()
+                    }
+                    btnVoice.setOnClickListener {
+                        activeEditText = etComentario
+                        startVoiceRecognition()
                     }
                 }
             }
@@ -387,7 +451,9 @@ class HomeActivity : AppCompatActivity() {
                                 idConcept = idConcept,
                                 comment = if(comentario.isEmpty()) "Avance de $nombre" else comentario,
                                 cantidad = cant,
-                                isSynced = false
+                                isSynced = false,
+                                latitude = lastLat,
+                                longitude = lastLon
                             ))
                             logIdGenerated = insertedId.toInt()
 
@@ -446,6 +512,18 @@ class HomeActivity : AppCompatActivity() {
             }
         }
         dialog.show()
+    }
+    private fun startVoiceRecognition() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dicta tu comentario...")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Tu dispositivo no soporta dictado por voz", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun openCamera() {

@@ -2,16 +2,19 @@ package com.canchola.ui.quotes
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.speech.RecognizerIntent
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -63,6 +66,22 @@ class QuoteDetailActivity : AppCompatActivity() {
     private var currentEditingAdapter: PhotoAdapter? = null
     private var currentPhotoUri: Uri? = null
     private var currentPhotoAbsolutePath: String? = null
+
+    // Para dictado por voz en alcances
+    private var activeEditText: EditText? = null
+    private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0)
+            spokenText?.let {
+                val currentText = activeEditText?.text.toString()
+                if (currentText.isEmpty()) {
+                    activeEditText?.setText(it)
+                } else {
+                    activeEditText?.setText("$currentText $it")
+                }
+            }
+        }
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -155,6 +174,8 @@ class QuoteDetailActivity : AppCompatActivity() {
                     val btnAgregarComentario = itemView.findViewById<Button>(R.id.btnAgregarComentario)
                     val rvPhotos = itemView.findViewById<RecyclerView>(R.id.rvPhotosHome)
                     val etComentario = itemView.findViewById<EditText>(R.id.etComentario)
+                    val btnVoice = itemView.findViewById<ImageButton>(R.id.btnVoiceAlcance)
+                    val layoutComentarioVoz = itemView.findViewById<View>(R.id.layoutComentarioVoz)
 
                     tvIdConcept.text = idConcepto
                     tvNombre.text = nombreConcepto
@@ -177,17 +198,34 @@ class QuoteDetailActivity : AppCompatActivity() {
                     rvPhotos.adapter = itemPhotoAdapter
 
                     btnAgregarComentario.setOnClickListener {
-                        etComentario.visibility = if(etComentario.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                        layoutComentarioVoz.visibility = if(layoutComentarioVoz.visibility == View.VISIBLE) View.GONE else View.VISIBLE
                     }
                     btnAgregarFoto.setOnClickListener {
                         currentEditingUriList = itemUriList
                         currentEditingAdapter = itemPhotoAdapter
                         openCamera()
                     }
+                    btnVoice.setOnClickListener {
+                        activeEditText = etComentario
+                        startVoiceRecognition()
+                    }
 
                     binding.containerAlcances.addView(itemView)
                 }
             }
+        }
+    }
+
+    private fun startVoiceRecognition() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dicta tu comentario...")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Tu dispositivo no soporta dictado por voz", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -345,7 +383,9 @@ class QuoteDetailActivity : AppCompatActivity() {
                             idLog = logIdGenerated,
                             isSynced = false,
                             idUser = sessionManager.getUserId(),
-                            logIdGenerated = logIdGenerated
+                            logIdGenerated = logIdGenerated,
+                            latitude = lastLat,
+                            longitude = lastLon
                         )
                         db.quoteConceptDao().insert(newConcept)
                     }

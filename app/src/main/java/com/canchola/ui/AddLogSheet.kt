@@ -2,15 +2,19 @@ package com.canchola.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.speech.RecognizerIntent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,6 +55,22 @@ class AddLogSheet(val quoteId: Int? = null, val type: String?) : BottomSheetDial
     private var currentPhotoUri: Uri? = null
     private var currentPhotoAbsolutePath: String? = null
     private val uriList = mutableListOf<Uri>()
+
+    // Launcher para dictado por voz
+    private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0)
+            spokenText?.let {
+                val etComment = view?.findViewById<EditText>(R.id.etComment)
+                val currentText = etComment?.text.toString()
+                if (currentText.isEmpty()) {
+                    etComment?.setText(it)
+                } else {
+                    etComment?.setText("$currentText $it")
+                }
+            }
+        }
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -102,6 +122,7 @@ class AddLogSheet(val quoteId: Int? = null, val type: String?) : BottomSheetDial
         val btnSave = view.findViewById<Button>(R.id.btnSave)
         val btnPhoto = view.findViewById<Button>(R.id.btnTakePhoto)
         val rvPhotos = view.findViewById<RecyclerView>(R.id.rvPhotos)
+        val btnVoice = view.findViewById<ImageButton>(R.id.btnVoiceComment)
 
         photoAdapter = PhotoAdapter(
             photoList = uriList,
@@ -117,6 +138,7 @@ class AddLogSheet(val quoteId: Int? = null, val type: String?) : BottomSheetDial
         rvPhotos.adapter = photoAdapter
 
         btnPhoto.setOnClickListener { openCamera() }
+        btnVoice.setOnClickListener { startVoiceRecognition() }
 
         if (type == "photo") openCamera()
 
@@ -138,6 +160,19 @@ class AddLogSheet(val quoteId: Int? = null, val type: String?) : BottomSheetDial
             }
         }
         return view
+    }
+
+    private fun startVoiceRecognition() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dicta tu comentario...")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (e: Exception) {
+            Toast.makeText(requireContext(), "Tu dispositivo no soporta dictado por voz", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun mostrarFotoGrande(uri: Uri) {
