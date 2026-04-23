@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -162,9 +163,14 @@ class QuoteDetailActivity : AppCompatActivity() {
             lista.forEach { concepto ->
                 val conceptoLimpio = concepto.trim()
                 if (conceptoLimpio.isNotEmpty()) {
+                    Log.d("CONCEPTO", conceptoLimpio)
                     val dataConcepto = conceptoLimpio.split(";")
                     val idConcepto = dataConcepto.getOrNull(0) ?: ""
                     val nombreConcepto = dataConcepto.getOrNull(1) ?: ""
+                    val arrayNombreConcepto = nombreConcepto.split(" ")
+
+                    val cantidadTotal = arrayNombreConcepto.getOrNull(0)?.toDoubleOrNull() ?: 0.0
+                    val unitConcepto = arrayNombreConcepto.getOrNull(1) ?: ""
 
                     val itemView = layoutInflater.inflate(R.layout.item_alcance, null)
                     val tvIdConcept = itemView.findViewById<TextView>(R.id.tvIdConcept)
@@ -176,10 +182,37 @@ class QuoteDetailActivity : AppCompatActivity() {
                     val etComentario = itemView.findViewById<EditText>(R.id.etComentario)
                     val btnVoice = itemView.findViewById<ImageButton>(R.id.btnVoiceAlcance)
                     val layoutComentarioVoz = itemView.findViewById<View>(R.id.layoutComentarioVoz)
+                    val tvAcumulado = itemView.findViewById<TextView>(R.id.tvCantidadAcumulada)
 
                     tvIdConcept.text = idConcepto
                     tvNombre.text = nombreConcepto
                     etCantidad.setHint("0.0")
+
+                    lifecycleScope.launch {
+                        try {
+                            val logs = db.logEntryDao().getLogsByConcept(idConcepto)
+                            val suma = logs.sumOf { it.cantidad?.toDoubleOrNull() ?: 0.0 }
+                            
+                            tvAcumulado.text = " ${String.format("%.2f", suma)} / $cantidadTotal $unitConcepto"
+                            
+                            when {
+                                suma > cantidadTotal && cantidadTotal > 0 -> {
+                                    tvAcumulado.setTextColor(Color.parseColor("#FF3B30")) // Rojo (Mayor)
+                                }
+                                suma == cantidadTotal && cantidadTotal > 0 -> {
+                                    tvAcumulado.setTextColor(Color.parseColor("#34C759")) // Verde (Igual)
+                                }
+                                suma > 0 && suma < cantidadTotal -> {
+                                    tvAcumulado.setTextColor(Color.parseColor("#FFCC00")) // Amarillo (Menor)
+                                }
+                                else -> {
+                                    tvAcumulado.setTextColor(Color.GRAY)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ROOM_ERROR", "Error al obtener logs: ${e.message}")
+                        }
+                    }
 
                     val itemUriList = mutableListOf<Uri>()
                     dataMap[itemView] = itemUriList
@@ -348,6 +381,7 @@ class QuoteDetailActivity : AppCompatActivity() {
                     val uris = dataMap[item] ?: emptyList<Uri>()
 
                     var logIdGenerated: Int? = null
+
 
                     if (comentario.isNotEmpty() || uris.isNotEmpty() || cant.isNotEmpty()) {
                         val insertedId = db.logEntryDao().insert(LogEntry(

@@ -371,7 +371,12 @@ class HomeActivity : AppCompatActivity() {
                     val dataConcepto = conceptoLimpio.split(";")
                     val idConcepto = dataConcepto.get(0)
                     val nombreConcepto = dataConcepto.get(1)
-                    
+                    val arrayNombreConcepto = nombreConcepto.split(" ")
+
+                    val cantidadTotal = arrayNombreConcepto.getOrNull(0)?.toDoubleOrNull() ?: 0.0
+                    val unitConcepto = arrayNombreConcepto.get(1)
+
+
                     val itemView = layoutInflater.inflate(R.layout.item_alcance, null)
                     val tvIdConcept = itemView.findViewById<TextView>(R.id.tvIdConcept)
                     val tvNombre = itemView.findViewById<TextView>(R.id.tvNombreAlcance)
@@ -380,9 +385,40 @@ class HomeActivity : AppCompatActivity() {
                     val btnAgregarComentario = itemView.findViewById<Button>(R.id.btnAgregarComentario)
                     val rvPhotos = itemView.findViewById<RecyclerView>(R.id.rvPhotosHome)
                     val etComentario = itemView.findViewById<EditText>(R.id.etComentario)
-                    val layoutComentarioVoz = itemView.findViewById<View>(R.id.layoutComentarioVoz) // <--- BUSCA EL PADRE
+                    val layoutComentarioVoz = itemView.findViewById<View>(R.id.layoutComentarioVoz)
                     val btnVoice = itemView.findViewById<ImageButton>(R.id.btnVoiceAlcance)
-                    // --- NUEVO: Cada concepto tiene su propia lista de  y su propio adaptador ---
+                    val tvAcumulado = itemView.findViewById<TextView>(R.id.tvCantidadAcumulada)
+
+                    tvIdConcept.text = idConcepto
+                    tvNombre.text = nombreConcepto
+                    etCantidad.setHint("0.0")
+
+                    lifecycleScope.launch {
+                        try {
+                            val logs = db.logEntryDao().getLogsByConcept(idConcepto)
+                            val suma = logs.sumOf { it.cantidad?.toDoubleOrNull() ?: 0.0 }
+
+                            tvAcumulado.text = " ${String.format("%.2f", suma)} / $cantidadTotal ${unitConcepto}"
+
+                            when {
+                                suma > cantidadTotal && cantidadTotal > 0 -> {
+                                    tvAcumulado.setTextColor(Color.parseColor("#FF3B30")) // Rojo (Mayor)
+                                }
+                                suma == cantidadTotal && cantidadTotal > 0 -> {
+                                    tvAcumulado.setTextColor(Color.parseColor("#34C759")) // Verde (Igual)
+                                }
+                                suma > 0 && suma < cantidadTotal -> {
+                                    tvAcumulado.setTextColor(Color.parseColor("#FFCC00")) // Amarillo (Menor)
+                                }
+                                else -> {
+                                    tvAcumulado.setTextColor(Color.GRAY)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ROOM_ERROR", "Error al obtener logs: ${e.message}")
+                        }
+                    }
+
                     val itemUriList = mutableListOf<Uri>()
                     dataMap[itemView] = itemUriList
                     
@@ -395,19 +431,9 @@ class HomeActivity : AppCompatActivity() {
                     rvPhotos.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
                     rvPhotos.adapter = itemPhotoAdapter
 
-                    tvIdConcept.text = idConcepto
-                    tvNombre.text = nombreConcepto
-                    etCantidad.setHint("0.0")
-
                     container.addView(itemView)
                     btnAgregarComentario.setOnClickListener {
-                        if (layoutComentarioVoz.visibility == View.VISIBLE) {
-                            layoutComentarioVoz.visibility = View.GONE
-                        } else {
-                            layoutComentarioVoz.visibility = View.VISIBLE
-                          //  etComentario.requestFocus() // Opcional: enfocar para escribir de una vez
-                        }
-
+                        layoutComentarioVoz.visibility = if (layoutComentarioVoz.visibility == View.VISIBLE) View.GONE else View.VISIBLE
                     }
                     btnAgregarFoto.setOnClickListener {
                         currentEditingUriList = itemUriList
@@ -423,96 +449,95 @@ class HomeActivity : AppCompatActivity() {
         }
 
         btnGuardar.setOnClickListener {
-            // 1. Mostrar diálogo de carga
-            val loadingDialog = MaterialAlertDialogBuilder(this@HomeActivity)
-                .setTitle("Procesando")
-                .setMessage("Enviando información, por favor espere...")
-                .setCancelable(false)
-                .show()
-            
-            btnGuardar.isEnabled = false // Desactivar el botón
-
-            lifecycleScope.launch {
-                try {
-                    for (i in 0 until container.childCount) {
-                        val item = container.getChildAt(i)
-                        val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
-                        val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
-                        val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
-                        val comentario = item.findViewById<EditText>(R.id.etComentario).text.toString()
-                        val uris = dataMap[item] ?: emptyList<Uri>()
-
-                        var logIdGenerated: Int? = null
-
-                        // 1. Primero guardamos el LogEntry si hay evidencia (comentario o fotos)
-                        if (comentario.isNotEmpty() || uris.isNotEmpty() || cant.isNotEmpty()) {
-                            val insertedId = db.logEntryDao().insert(LogEntry(
-                                quoteId = quote.idQuote,
-                                idConcept = idConcept,
-                                comment = if(comentario.isEmpty()) "Avance de $nombre" else comentario,
-                                cantidad = cant,
-                                isSynced = false,
-                                latitude = lastLat,
-                                longitude = lastLon
-                            ))
-                            logIdGenerated = insertedId.toInt()
-
-                            // Guardar las Fotos vinculadas al LogEntry
-                            if (uris.isNotEmpty()) {
-                                val photosToInsert = uris.map { uri ->
-                                    Photos(
-                                        logEntryId = logIdGenerated,
-                                        uri = uri.toString(),
-                                        isUploaded = false
-                                    )
-                                }
-                                db.photoDao().insertPhotos(photosToInsert)
-                            }
-                        }
-
-                        // 2. Guardar el Avance (QuoteConcepts) vinculando el idLog
-                        if (cant.isNotEmpty()) {
-                            val newConcept = QuoteConcepts(
-                                idConcept = idConcept,
-                                quoteId = quote?.idQuote,
-                                nameConcept = nombre,
-                                cantConcept = cant,
-                                comment = if(comentario.isNotEmpty()) comentario else null,
-                                idLog = logIdGenerated, // VÍNCULO DIRECTO
-                                isSynced = false,
-                                idUser = currentUserId,
-                                logIdGenerated = logIdGenerated
-                            )
-                            db.quoteConceptDao().insert(newConcept)
-                        }
-                    }
-                    
-                    val repoitoryQuoteConcepts = QuoteConceptRepository(
-                        quote, sessionManager.getUserId(), db.quoteConceptDao(),db.logEntryDao(),db.photoDao(), apiService, this@HomeActivity
-                    )
-                    val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote)
-                    val isSynced = repoitoryQuoteConcepts.SyncConcepts(quoteConceptsList)
-
-                    if (isSynced) {
-                        Toast.makeText(this@HomeActivity, "✅ Enviado exitosamente", Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(this@HomeActivity, "💾 Guardado localmente ", Toast.LENGTH_LONG).show()
-                    }
-                } catch (e: Exception) {
-                    Log.e("SAVE_ERROR", "Error: ${e.message}")
-                    Toast.makeText(this@HomeActivity, "❌ Error al procesar datos", Toast.LENGTH_SHORT).show()
-                } finally {
-                    // 2. Ocultar diálogo y cerrar el formulario al terminar
-                    loadingDialog.dismiss()
-                    currentEditingUriList = null
-                    currentEditingAdapter = null
-                    updateSyncBadge()
-                    dialog.dismiss()
-                }
-            }
+            // ... (Lógica de guardado existente) ...
+            guardarTodo(container, dataMap, quote, dialog)
         }
         dialog.show()
     }
+
+    private fun guardarTodo(container: LinearLayout, dataMap: Map<View, List<Uri>>, quote: Quote, dialog: BottomSheetDialog) {
+        val loadingDialog = MaterialAlertDialogBuilder(this@HomeActivity)
+            .setTitle("Procesando")
+            .setMessage("Enviando información, por favor espere...")
+            .setCancelable(false)
+            .show()
+
+        lifecycleScope.launch {
+            try {
+                for (i in 0 until container.childCount) {
+                    val item = container.getChildAt(i)
+                    val idConcept = item.findViewById<TextView>(R.id.tvIdConcept).text.toString()
+                    val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
+                    val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
+                    val comentario = item.findViewById<EditText>(R.id.etComentario).text.toString()
+                    val uris = dataMap[item] ?: emptyList<Uri>()
+
+                    var logIdGenerated: Int? = null
+
+                    if (comentario.isNotEmpty() || uris.isNotEmpty() || cant.isNotEmpty()) {
+                        val insertedId = db.logEntryDao().insert(LogEntry(
+                            quoteId = quote.idQuote,
+                            idConcept = idConcept,
+                            comment = if(comentario.isEmpty()) "Avance de $nombre" else comentario,
+                            cantidad = cant,
+                            isSynced = false,
+                            latitude = lastLat,
+                            longitude = lastLon
+                        ))
+                        logIdGenerated = insertedId.toInt()
+
+                        if (uris.isNotEmpty()) {
+                            val photosToInsert = uris.map { uri ->
+                                Photos(
+                                    logEntryId = logIdGenerated,
+                                    uri = uri.toString(),
+                                    isUploaded = false
+                                )
+                            }
+                            db.photoDao().insertPhotos(photosToInsert)
+                        }
+                    }
+
+                    if (cant.isNotEmpty()) {
+                        val newConcept = QuoteConcepts(
+                            idConcept = idConcept,
+                            quoteId = quote?.idQuote,
+                            nameConcept = nombre,
+                            cantConcept = cant,
+                            comment = if(comentario.isNotEmpty()) comentario else null,
+                            idLog = logIdGenerated,
+                            isSynced = false,
+                            idUser = currentUserId,
+                            logIdGenerated = logIdGenerated,
+                            latitude = lastLat,
+                            longitude = lastLon
+                        )
+                        db.quoteConceptDao().insert(newConcept)
+                    }
+                }
+                
+                val repository = QuoteConceptRepository(
+                    quote, sessionManager.getUserId(), db.quoteConceptDao(), db.logEntryDao(), db.photoDao(), apiService, this@HomeActivity
+                )
+                val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote)
+                val isSynced = repository.SyncConcepts(quoteConceptsList)
+
+                if (isSynced) {
+                    Toast.makeText(this@HomeActivity, "✅ Enviado exitosamente", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@HomeActivity, "💾 Guardado localmente ", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Log.e("SAVE_ERROR", "Error: ${e.message}")
+                Toast.makeText(this@HomeActivity, "❌ Error al procesar datos", Toast.LENGTH_SHORT).show()
+            } finally {
+                loadingDialog.dismiss()
+                updateSyncBadge()
+                dialog.dismiss()
+            }
+        }
+    }
+
     private fun startVoiceRecognition() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)

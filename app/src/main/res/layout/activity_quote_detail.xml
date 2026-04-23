@@ -203,7 +203,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="ALCANCES"
+                        android:text="ORDEN DE TRABAJO"
                         android:textSize="12sp"
                         android:textStyle="bold"
                         android:textColor="@color/black"

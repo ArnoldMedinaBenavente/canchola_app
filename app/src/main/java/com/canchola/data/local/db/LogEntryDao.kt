@@ -36,4 +36,9 @@ interface LogEntryDao {
     // Borrar un registro (por si el usuario desea eliminar una evidencia)
     @Delete
     suspend fun delete(entry: LogEntry)
+    
+    // OBTENER LOS LOG_ENTRIES DE UN idConcept
+    @Query("SELECT * FROM log_entries WHERE idConcept = :idConcept ORDER BY createdAt DESC")
+    suspend fun getLogsByConcept(idConcept: String): List<LogEntry>
+
 }
