@@ -37,7 +37,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class AddLogSheet(val quoteId: Int? = null, val type: String?) : BottomSheetDialogFragment() {
+class AddLogSheet(val quoteId: Int? = null, val idProject: Int? = null, val type: String?) : BottomSheetDialogFragment() {
 
     private val viewModel: LogViewModel by activityViewModels {
         val database = AppDatabase.getDatabase(requireContext())
@@ -147,6 +147,7 @@ class AddLogSheet(val quoteId: Int? = null, val type: String?) : BottomSheetDial
             if (comment.isNotBlank() || photoPaths.isNotEmpty()) {
                 val newLog = LogEntry(
                     quoteId = quoteId,
+                    idProject = idProject,
                     comment = comment,
                     cantidad = "Solo comentario",
                     isSynced = false,

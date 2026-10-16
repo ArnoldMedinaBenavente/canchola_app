@@ -1,12 +1,10 @@
 package com.canchola.ui.home
 
-import QuotesAdapter
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -41,12 +39,12 @@ import com.canchola.ui.AddLogSheet
 import com.canchola.ui.photo.PhotoAdapter
 import com.canchola.ui.photo.Photos
 import com.canchola.ui.quotes.QuoteDetailActivity
+import com.canchola.ui.quotes.QuotesAdapter
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -80,7 +78,7 @@ class HomeActivity : AppCompatActivity() {
         if (success && currentPhotoUri != null) {
             currentPhotoAbsolutePath?.let { path ->
                 val newUri = Uri.fromFile(java.io.File(path))
-                
+
                 // Si tenemos un "contexto" de edición (un RecyclerView específico), lo actualizamos
                 currentEditingUriList?.let { list ->
                     list.add(newUri)
@@ -154,17 +152,22 @@ class HomeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 // Paso 1: Intentar traer de Laravel (Online)
-                val response = apiService.getQuotes()
-
+                val response = apiService.getActives()
+                Log.d("API_TEST", "Código de respuesta HTTP: ${response.body()}")
                 if (response.isSuccessful && response.body() != null) {
                     val remoteQuotes = response.body()!!
+                    val processedData = remoteQuotes.map { item ->
+                        item.apply {
+                            unique_id = if (idQuote != null) "Q$idQuote" else "P$idProject"
+                        }
+                    }
                     try {
-                        db.quoteDao().insertQuotes(remoteQuotes)
+                        db.quoteDao().insertQuotes(processedData)
                         Log.d("ROOM_DB", "¡ÉXITO! Se guardó en la memoria.")
                     } catch (dbError: Exception) {
                         Log.e("ROOM_DB", "ERROR AL INSERTAR: ${dbError.message}")
                     }
-                    displayQuotes(remoteQuotes)
+                    displayQuotes(processedData)
                 } else {
                     // Si el servidor falla (ej. error 500), intentar cargar local
                     loadFromLocalDatabase("Error del servidor, mostrando datos locales")
@@ -192,11 +195,11 @@ class HomeActivity : AppCompatActivity() {
         // 1. Creamos el adaptador pasando la lista y las dos acciones (Descarga y Opciones)
         adapter = QuotesAdapter(
             list,
-            { quote ->
+            { quote: Quote ->
                 // Acción cuando tocan el botón azul de descarga
                 downloadQuote(quote)
             },
-            { quote ->
+            { quote: Quote ->
                 // Acción cuando tocan la tarjeta (abre el menú de iOS)
                 showQuoteOptions(quote)
             }
@@ -241,10 +244,10 @@ class HomeActivity : AppCompatActivity() {
             val unsyncedLogs = db.logEntryDao().getUnsyncedLogs()
             val unsyncedPhotos = db.photoDao().getUnsyncedPhotos()
             val unsyncedConcepts = db.quoteConceptDao().getAllUnsyncedConcepts()
-            
+
             val totalComments = unsyncedLogs.size + unsyncedConcepts.size
             val totalPhotos = unsyncedPhotos.size
-            
+
             if (totalComments == 0 && totalPhotos == 0) {
                 MaterialAlertDialogBuilder(this@HomeActivity)
                     .setTitle("Al día")
@@ -297,14 +300,12 @@ class HomeActivity : AppCompatActivity() {
             val unsyncedConceptsCount = db.quoteConceptDao().getAllUnsyncedConcepts().size
             val unsyncedPhotosCount = db.photoDao().getUnsyncedPhotos().size
             val total = unsyncedLogsCount + unsyncedConceptsCount + unsyncedPhotosCount
-            
+
             if (total > 0) {
                 binding.tvSyncBadge.text = total.toString()
                 binding.tvSyncBadge.visibility = View.VISIBLE
-               // binding.ivBell.imageTintList = ColorStateList.valueOf(Color.parseColor("#007AFF")) // Azul
             } else {
                 binding.tvSyncBadge.visibility = View.GONE
-               // binding.ivBell.imageTintList = ColorStateList.valueOf(Color.GRAY) // Gris
             }
         }
     }
@@ -334,14 +335,14 @@ class HomeActivity : AppCompatActivity() {
         // Opción 3: Commentario
         view.findViewById<TextView>(R.id.btnAddComment).setOnClickListener {
             dialog.dismiss()
-            val sheet = AddLogSheet(quoteId = quote.idQuote,"comment") // Pasas el ID
+            val sheet = AddLogSheet(quoteId = quote.idQuote, idProject = quote.idProject,"comment") // Pasas el ID
             sheet.show(supportFragmentManager, "AddLog")
         }
         // Opción 4: TOMAR FOTO
         view.findViewById<TextView>(R.id.btnAddPhoto).setOnClickListener {
             dialog.dismiss()
             // Aquí podrías manejar fotos generales de la cotización si fuera necesario
-            val sheet = AddLogSheet(quoteId = quote.idQuote,"photo") // Pasas el ID
+            val sheet = AddLogSheet(quoteId = quote.idQuote, idProject = quote.idProject,"photo") // Pasas el ID
             sheet.show(supportFragmentManager, "AddLog")
         }
 
@@ -357,7 +358,7 @@ class HomeActivity : AppCompatActivity() {
         val container = view.findViewById<LinearLayout>(R.id.containerAlcancesDialog)
         val btnGuardar = view.findViewById<Button>(R.id.btnGuardarTodoDialog)
 
-        val cadenaAlcances = quote?.conceptos ?: ""
+        val cadenaAlcances = quote.conceptos_detalle ?: ""
 
         // Mapas para guardar las referencias de datos por cada vista inflada
         val dataMap = mutableMapOf<View, MutableList<Uri>>()
@@ -369,12 +370,11 @@ class HomeActivity : AppCompatActivity() {
                 val conceptoLimpio = concepto.trim()
                 if (conceptoLimpio.isNotEmpty()) {
                     val dataConcepto = conceptoLimpio.split(";")
-                    val idConcepto = dataConcepto.get(0)
-                    val nombreConcepto = dataConcepto.get(1)
-                    val arrayNombreConcepto = nombreConcepto.split(" ")
-
-                    val cantidadTotal = arrayNombreConcepto.getOrNull(0)?.toDoubleOrNull() ?: 0.0
-                    val unitConcepto = arrayNombreConcepto.get(1)
+                    // EXTRACCIÓN CORRECTA BASADA EN LOS ÍNDICES (;)
+                    val idConcepto = dataConcepto.getOrNull(0) ?: ""
+                    val nombreConcepto = dataConcepto.getOrNull(1) ?: ""
+                    val cantidadTotal = dataConcepto.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+                    val unitConcepto = dataConcepto.getOrNull(3) ?: ""
 
 
                     val itemView = layoutInflater.inflate(R.layout.item_alcance, null)
@@ -395,10 +395,10 @@ class HomeActivity : AppCompatActivity() {
 
                     lifecycleScope.launch {
                         try {
-                            val logs = db.logEntryDao().getLogsByConcept(idConcepto)
+                            val logs = db.logEntryDao().getLogsByConcept(idConcepto,quote.idQuote,quote.idProject)
                             val suma = logs.sumOf { it.cantidad?.toDoubleOrNull() ?: 0.0 }
 
-                            tvAcumulado.text = " ${String.format("%.2f", suma)} / $cantidadTotal ${unitConcepto}"
+                            tvAcumulado.text = " ${String.format("%.2f", suma)} / $cantidadTotal $unitConcepto"
 
                             when {
                                 suma > cantidadTotal && cantidadTotal > 0 -> {
@@ -421,7 +421,7 @@ class HomeActivity : AppCompatActivity() {
 
                     val itemUriList = mutableListOf<Uri>()
                     dataMap[itemView] = itemUriList
-                    
+
                     val itemPhotoAdapter = PhotoAdapter(itemUriList) { position ->
                         itemUriList.removeAt(position)
                         (rvPhotos.adapter as? PhotoAdapter)?.notifyItemRemoved(position)
@@ -449,7 +449,6 @@ class HomeActivity : AppCompatActivity() {
         }
 
         btnGuardar.setOnClickListener {
-            // ... (Lógica de guardado existente) ...
             guardarTodo(container, dataMap, quote, dialog)
         }
         dialog.show()
@@ -470,7 +469,7 @@ class HomeActivity : AppCompatActivity() {
                     val nombre = item.findViewById<TextView>(R.id.tvNombreAlcance).text.toString()
                     val cant = item.findViewById<EditText>(R.id.etCantidadAvance).text.toString()
                     val comentario = item.findViewById<EditText>(R.id.etComentario).text.toString()
-                    val uris = dataMap[item] ?: emptyList<Uri>()
+                    val uris = dataMap[item] ?: emptyList()
 
                     var logIdGenerated: Int? = null
 
@@ -478,7 +477,7 @@ class HomeActivity : AppCompatActivity() {
                         val insertedId = db.logEntryDao().insert(LogEntry(
                             quoteId = quote.idQuote,
                             idConcept = idConcept,
-                            comment = if(comentario.isEmpty()) "Avance de $nombre" else comentario,
+                            comment = comentario.ifEmpty { "Avance de $nombre" },
                             cantidad = cant,
                             isSynced = false,
                             latitude = lastLat,
@@ -501,10 +500,11 @@ class HomeActivity : AppCompatActivity() {
                     if (cant.isNotEmpty()) {
                         val newConcept = QuoteConcepts(
                             idConcept = idConcept,
-                            quoteId = quote?.idQuote,
+                            quoteId = quote.idQuote,
+                            idProject = quote.idProject,
                             nameConcept = nombre,
                             cantConcept = cant,
-                            comment = if(comentario.isNotEmpty()) comentario else null,
+                            comment = comentario.ifEmpty { null },
                             idLog = logIdGenerated,
                             isSynced = false,
                             idUser = currentUserId,
@@ -515,11 +515,11 @@ class HomeActivity : AppCompatActivity() {
                         db.quoteConceptDao().insert(newConcept)
                     }
                 }
-                
+
                 val repository = QuoteConceptRepository(
                     quote, sessionManager.getUserId(), db.quoteConceptDao(), db.logEntryDao(), db.photoDao(), apiService, this@HomeActivity
                 )
-                val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote)
+                val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote ?: 0, quote.idProject ?: 0)
                 val isSynced = repository.SyncConcepts(quoteConceptsList)
 
                 if (isSynced) {

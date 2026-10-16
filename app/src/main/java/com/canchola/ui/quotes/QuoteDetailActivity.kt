@@ -23,6 +23,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -75,11 +76,7 @@ class QuoteDetailActivity : AppCompatActivity() {
             val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0)
             spokenText?.let {
                 val currentText = activeEditText?.text.toString()
-                if (currentText.isEmpty()) {
-                    activeEditText?.setText(it)
-                } else {
-                    activeEditText?.setText("$currentText $it")
-                }
+                activeEditText?.setText(if (currentText.isEmpty()) it else "$currentText $it")
             }
         }
     }
@@ -111,7 +108,9 @@ class QuoteDetailActivity : AppCompatActivity() {
 
         db = AppDatabase.getDatabase(this)
         sessionManager = SessionManager(this)
-        quote = intent.getSerializableExtra("QUOTE_DATA") as? Quote
+        
+        // Uso de IntentCompat para solucionar la depreciación de getSerializableExtra
+        quote = IntentCompat.getSerializableExtra(intent, "QUOTE_DATA", Quote::class.java)
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         checkLocationPermissions()
@@ -142,8 +141,8 @@ class QuoteDetailActivity : AppCompatActivity() {
     }
 
     private fun mostrarDatos(quote: Quote) {
-        binding.detailsTvFolio.text = "Folio: #${quote.idQuote}"
-        binding.tvClienteDetalle.text = quote.nameCustomer
+        binding.detailsTvFolio.text = if (quote.isQuote()) "Folio: #${quote.idQuote}" else "Proyecto: #${quote.idProject}"
+        binding.tvClienteDetalle.text = quote.getFinalCustomer()
         binding.tvFechaDetalle.text = quote.atte
 
         if (!quote.keywords.isNullOrEmpty()) {
@@ -156,21 +155,19 @@ class QuoteDetailActivity : AppCompatActivity() {
 
     private fun setupAlcances(quote: Quote) {
         binding.containerAlcances.removeAllViews()
-        val cadenaConceptos = quote.conceptos ?: ""
+        val cadenaConceptos = quote.conceptos_detalle ?: ""
 
         if (cadenaConceptos.isNotEmpty()) {
             val lista = cadenaConceptos.split("|")
             lista.forEach { concepto ->
                 val conceptoLimpio = concepto.trim()
                 if (conceptoLimpio.isNotEmpty()) {
-                    Log.d("CONCEPTO", conceptoLimpio)
                     val dataConcepto = conceptoLimpio.split(";")
+                    // EXTRACCIÓN CORRECTA BASADA EN LOS ÍNDICES (;)
                     val idConcepto = dataConcepto.getOrNull(0) ?: ""
                     val nombreConcepto = dataConcepto.getOrNull(1) ?: ""
-                    val arrayNombreConcepto = nombreConcepto.split(" ")
-
-                    val cantidadTotal = arrayNombreConcepto.getOrNull(0)?.toDoubleOrNull() ?: 0.0
-                    val unitConcepto = arrayNombreConcepto.getOrNull(1) ?: ""
+                    val cantidadTotal = dataConcepto.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+                    val unitConcepto = dataConcepto.getOrNull(3) ?: ""
 
                     val itemView = layoutInflater.inflate(R.layout.item_alcance, null)
                     val tvIdConcept = itemView.findViewById<TextView>(R.id.tvIdConcept)
@@ -190,20 +187,20 @@ class QuoteDetailActivity : AppCompatActivity() {
 
                     lifecycleScope.launch {
                         try {
-                            val logs = db.logEntryDao().getLogsByConcept(idConcepto)
+                            val logs = db.logEntryDao().getLogsByConcept(idConcepto, quote.idQuote, quote.idProject)
                             val suma = logs.sumOf { it.cantidad?.toDoubleOrNull() ?: 0.0 }
-                            
-                            tvAcumulado.text = " ${String.format("%.2f", suma)} / $cantidadTotal $unitConcepto"
-                            
+
+                            tvAcumulado.text = "${String.format(Locale.getDefault(), "%.2f", suma)} / $cantidadTotal $unitConcepto"
+
                             when {
                                 suma > cantidadTotal && cantidadTotal > 0 -> {
-                                    tvAcumulado.setTextColor(Color.parseColor("#FF3B30")) // Rojo (Mayor)
+                                    tvAcumulado.setTextColor(Color.parseColor("#FF3B30")) // Rojo
                                 }
                                 suma == cantidadTotal && cantidadTotal > 0 -> {
-                                    tvAcumulado.setTextColor(Color.parseColor("#34C759")) // Verde (Igual)
+                                    tvAcumulado.setTextColor(Color.parseColor("#34C759")) // Verde
                                 }
                                 suma > 0 && suma < cantidadTotal -> {
-                                    tvAcumulado.setTextColor(Color.parseColor("#FFCC00")) // Amarillo (Menor)
+                                    tvAcumulado.setTextColor(Color.parseColor("#FFCC00")) // Amarillo
                                 }
                                 else -> {
                                     tvAcumulado.setTextColor(Color.GRAY)
@@ -264,12 +261,12 @@ class QuoteDetailActivity : AppCompatActivity() {
 
     private fun setupButtons(quote: Quote) {
         binding.btnTomarFoto.setOnClickListener {
-            val sheet = AddLogSheet(quoteId = quote.idQuote, "photo")
+            val sheet = AddLogSheet(quoteId = quote.idQuote, idProject = quote.idProject, type = "photo")
             sheet.show(supportFragmentManager, "AddLog")
         }
 
         binding.btnRegistrarComentario.setOnClickListener {
-            val sheet = AddLogSheet(quoteId = quote.idQuote, "comment")
+            val sheet = AddLogSheet(quoteId = quote.idQuote, idProject = quote.idProject, type = "comment")
             sheet.show(supportFragmentManager, "AddLog")
         }
 
@@ -292,7 +289,7 @@ class QuoteDetailActivity : AppCompatActivity() {
         val rv = view.findViewById<RecyclerView>(R.id.rvVerFotos)
         
         lifecycleScope.launch {
-            val photos = db.photoDao().getPhotosByQuote(quote.idQuote)
+            val photos = db.photoDao().getPhotosByQuoteOrProject(quote.idQuote, quote.idProject)
             val uris = photos.map { Uri.parse(it.uri) }.toMutableList()
             
             if (uris.isEmpty()) {
@@ -327,7 +324,10 @@ class QuoteDetailActivity : AppCompatActivity() {
         val rv = view.findViewById<RecyclerView>(R.id.rvVerNotas)
         
         lifecycleScope.launch {
-            val logs = db.logEntryDao().getLogsByQuote(quote.idQuote).first()
+            val logs = db.logEntryDao()
+                .getLogsByQuoteOrProject(quote.idQuote, quote.idProject)
+                .first()
+
             if (logs.isEmpty()) {
                 Toast.makeText(this@QuoteDetailActivity, "No hay notas registradas", Toast.LENGTH_SHORT).show()
                 return@launch
@@ -382,12 +382,12 @@ class QuoteDetailActivity : AppCompatActivity() {
 
                     var logIdGenerated: Int? = null
 
-
                     if (comentario.isNotEmpty() || uris.isNotEmpty() || cant.isNotEmpty()) {
                         val insertedId = db.logEntryDao().insert(LogEntry(
                             quoteId = quote.idQuote,
+                            idProject = quote.idProject,
                             idConcept = idConcept,
-                            comment = if(comentario.isEmpty()) "Avance de $nombre" else comentario,
+                            comment = comentario.ifEmpty { "Avance de $nombre" },
                             cantidad = cant,
                             isSynced = false,
                             latitude = lastLat,
@@ -411,9 +411,10 @@ class QuoteDetailActivity : AppCompatActivity() {
                         val newConcept = QuoteConcepts(
                             idConcept = idConcept,
                             quoteId = quote.idQuote,
+                            idProject = quote.idProject,
                             nameConcept = nombre,
                             cantConcept = cant,
-                            comment = if(comentario.isNotEmpty()) comentario else null,
+                            comment = comentario.ifEmpty { null },
                             idLog = logIdGenerated,
                             isSynced = false,
                             idUser = sessionManager.getUserId(),
@@ -428,7 +429,7 @@ class QuoteDetailActivity : AppCompatActivity() {
                 val repository = QuoteConceptRepository(
                     quote, sessionManager.getUserId(), db.quoteConceptDao(), db.logEntryDao(), db.photoDao(), apiService, this@QuoteDetailActivity
                 )
-                val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote)
+                val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote, quote.idProject)
                 val isSynced = repository.SyncConcepts(quoteConceptsList)
 
                 if (isSynced) {

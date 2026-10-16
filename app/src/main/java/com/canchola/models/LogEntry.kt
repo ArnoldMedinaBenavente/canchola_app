@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 data class LogEntry(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val quoteId: Int? = null,
+    val idProject: Int? = null,
     val idConcept: String? = null,
     val comment: String? = "Sin comentarios",
     val cantidad: String? = null,

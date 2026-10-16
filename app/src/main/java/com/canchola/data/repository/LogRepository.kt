@@ -109,6 +109,7 @@ class LogRepository(
 
         val commentPart = (log.comment ?: "").toRequestBody("text/plain".toMediaTypeOrNull())
         val quoteIdPart = log.quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val projectIdPart = log.idProject?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val idConceptPart = log.idConcept?.toRequestBody("text/plain".toMediaTypeOrNull())
         // ENVIAR COMO MILISEGUNDOS PARA LARAVEL (Carbon::createFromTimestampMs)
         val createdAtPart = log.createdAt.toString().toRequestBody("text/plain".toMediaTypeOrNull())
@@ -121,6 +122,7 @@ class LogRepository(
         return apiService.uploadLogEntry(
             comment = commentPart,
             quoteId = quoteIdPart,
+            idProject = projectIdPart,
             idConcept = idConceptPart,
             amount = amountPart,
             photos = photoParts,

@@ -9,6 +9,7 @@ data class QuoteConcepts (
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val idConcept: String,
     val quoteId: Int?,
+    val idProject: Int?, // Nuevo campo para compatibilidad con proyectos
     val nameConcept: String?,
     val cantConcept: String?,
     val comment: String? = null,

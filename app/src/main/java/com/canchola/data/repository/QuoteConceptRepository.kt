@@ -43,12 +43,14 @@ class QuoteConceptRepository(
 
             try {
                 var allSuccess = true
-                val currentQuoteId = quote?.idQuote ?: 0
+                val currentQuoteId = quote?.idQuote
+                val currentProjectId = quote?.idProject
 
                 if (quoteConcepts.isNotEmpty()) {
                     val firstConcept = quoteConcepts.firstOrNull()
                     val response = uploadToLaravel(
-                        currentQuoteId, 
+                        currentQuoteId,
+                        currentProjectId,
                         userId, 
                         quoteConcepts, 
                         DateHelper.getCurrentDateForServer(),
@@ -56,13 +58,19 @@ class QuoteConceptRepository(
                         firstConcept?.longitude
                     )
                     if (response.isSuccessful && response.body()?.status == "success") {
-                        quoteConceptDao.updateSyncStatus(currentQuoteId)
+                        // Actualizar estado para ambos IDs si están presentes
+                        if (currentQuoteId != null) quoteConceptDao.updateSyncStatus(currentQuoteId)
+                        if (currentProjectId != null) quoteConceptDao.updateSyncStatus(currentProjectId)
                     } else {
                         allSuccess = false
                     }
                 }
 
-                val unsyncedLogs = logEntryDao.getUnsyncedLogs().filter { it.quoteId == currentQuoteId }
+                val unsyncedLogs = logEntryDao.getUnsyncedLogs().filter { 
+                    (currentQuoteId != null && it.quoteId == currentQuoteId) || 
+                    (currentProjectId != null && it.idProject == currentProjectId) 
+                }
+                
                 for (log in unsyncedLogs) {
                     val photos = photoDao.getUnsyncedPhotosByLog(log.id)
                     val logResponse = uploadLogWithPhotos(log, photos)
@@ -93,12 +101,15 @@ class QuoteConceptRepository(
 
                 val allUnsyncedConcepts = quoteConceptDao.getAllUnsyncedConcepts()
                 if (allUnsyncedConcepts.isNotEmpty()) {
-                    val groupedByQuote = allUnsyncedConcepts.groupBy { it.quoteId }
-                    for ((qId, concepts) in groupedByQuote) {
-                        if (qId == null) continue
+                    // Agrupar por quoteId o idProject para enviar en bloques
+                    val groupedByQuote = allUnsyncedConcepts.groupBy { it.quoteId ?: it.idProject }
+                    
+                    for ((groupId, concepts) in groupedByQuote) {
+                        if (groupId == null) continue
                         val firstConcept = concepts.firstOrNull()
                         val response = uploadToLaravel(
-                            qId, 
+                            firstConcept?.quoteId,
+                            firstConcept?.idProject,
                             userId, 
                             concepts, 
                             DateHelper.getCurrentDateForServer(),
@@ -106,7 +117,7 @@ class QuoteConceptRepository(
                             firstConcept?.longitude
                         )
                         if (response.isSuccessful && response.body()?.status == "success") {
-                            quoteConceptDao.updateSyncStatus(qId)
+                            quoteConceptDao.updateSyncStatus(groupId)
                         } else {
                             allSuccess = false
                         }
@@ -137,6 +148,7 @@ class QuoteConceptRepository(
 
     private suspend fun uploadToLaravel(
         quoteId: Int?,
+        projectId: Int?,
         userId: Int?,
         quoteConcepts: List<QuoteConcepts>,
         createdAt: String?,
@@ -147,6 +159,7 @@ class QuoteConceptRepository(
         val conceptsJsonString = gson.toJson(quoteConcepts)
         val conceptsPart = conceptsJsonString.toRequestBody("application/json".toMediaTypeOrNull())
         val quoteIdPart = quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val projectIdPart = projectId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val userIdPart = userId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val createdAtPart = createdAt?.toRequestBody("text/plain".toMediaTypeOrNull())
         
@@ -155,6 +168,7 @@ class QuoteConceptRepository(
 
         return apiService.uploadQuoteConcept(
             quoteId = quoteIdPart,
+            idProject = projectIdPart,
             concepts = conceptsPart,
             userId = userIdPart,
             created_at_app = createdAtPart,
@@ -169,6 +183,7 @@ class QuoteConceptRepository(
     ): Response<ApiService.GenericResponse> {
         val commentPart = (log.comment ?: "").toRequestBody("text/plain".toMediaTypeOrNull())
         val quoteIdPart = log.quoteId?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val projectIdPart = log.idProject?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
         val idConceptPart = log.idConcept?.toRequestBody("text/plain".toMediaTypeOrNull())
         val createdAtPart = log.createdAt.toString().toRequestBody("text/plain".toMediaTypeOrNull())
         val amountPart = log.cantidad?.toRequestBody("text/plain".toMediaTypeOrNull())
@@ -193,6 +208,7 @@ class QuoteConceptRepository(
         return apiService.uploadLogEntry(
             comment = commentPart,
             quoteId = quoteIdPart,
+            idProject = projectIdPart,
             idConcept = idConceptPart,
             amount = amountPart,
             photos = photoParts,

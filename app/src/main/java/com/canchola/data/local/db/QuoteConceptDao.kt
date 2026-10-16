@@ -5,42 +5,43 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import com.canchola.models.LogEntry
 import com.canchola.models.QuoteConcepts
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface  QuoteConceptDao{
+@JvmSuppressWildcards
+interface QuoteConceptDao {
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entry: QuoteConcepts): Long
 
-        @Insert(onConflict = OnConflictStrategy.REPLACE)
-        suspend fun insert(entry: QuoteConcepts): Long
+    // Obtener todas las bitácoras para mostrar en una lista
+    @Query("SELECT * FROM quoteConcepts ORDER BY createdAt DESC")
+    fun getAllLConcepts(): Flow<List<QuoteConcepts>>
 
-        // Obtener todas las bitácoras para mostrar en una lista
-        @Query("SELECT * FROM quoteConcepts ORDER BY createdAt DESC")
-        fun getAllLConcepts(): Flow<List<QuoteConcepts>>
+    // Filtrar bitácoras de una cotización específica
+    @Query("SELECT * FROM quoteConcepts WHERE quoteId = :qId OR idProject = :qId ORDER BY createdAt DESC")
+    fun getConceptsByQuote(qId: Int): Flow<List<QuoteConcepts>>
 
-        // Filtrar bitácoras de una cotización específica (si quoteId no es null)
-        @Query("SELECT * FROM quoteConcepts WHERE quoteId = :qId ORDER BY createdAt DESC")
-        fun getConceptsByQuote(qId: Int): Flow<List<QuoteConcepts>>
+    // --- FUNCIONES PARA EL FLUJO DE INTERNET ---
 
-        // --- FUNCIONES PARA EL FLUJO DE INTERNET ---
+    // Obtener los registros que aún no se han subido a la nube de Laravel.
+    // Usamos @JvmSuppressWildcards a nivel de interfaz para evitar que Kotlin
+    // genere List<? extends QuoteConcepts>, lo cual rompe la implementación de Room.
+    @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0 AND (quoteId = :quoteId OR idProject = :projectId)")
+    suspend fun getUnsyncedConcepts(quoteId: Int?, projectId: Int?): List<QuoteConcepts>
 
-        // Obtener los registros que aún no se han subido a la nube de Laravel
-        @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0 AND quoteId= :id")
-        suspend fun getUnsyncedConcepts(id:Int): List<QuoteConcepts>
+    @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0")
+    suspend fun getAllUnsyncedConcepts(): List<QuoteConcepts>
 
-        @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0")
-        suspend fun getAllUnsyncedConcepts(): List<QuoteConcepts>
+    // Actualizar el estado a 'Sincronizado' cuando Laravel confirme la recepción
+    @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE idLog = :idLog")
+    suspend fun updateSyncStatusByLog(idLog: Int)
 
-        // Actualizar el estado a 'Sincronizado' cuando Laravel confirme la recepción
-        @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE idLog = :idLog")
-        suspend fun updateSyncStatusByLog(idLog: Int)
+    @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE quoteId = :id OR idProject = :id")
+    suspend fun updateSyncStatus(id: Int)
 
-        @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE quoteId = :id")
-        suspend fun updateSyncStatus(id: Int)
-
-        // Borrar un registro (por si el usuario desea eliminar una evidencia)
-        @Delete
-        suspend fun delete(entry: QuoteConcepts)
+    // Borrar un registro
+    @Delete
+    suspend fun delete(entry: QuoteConcepts)
 }

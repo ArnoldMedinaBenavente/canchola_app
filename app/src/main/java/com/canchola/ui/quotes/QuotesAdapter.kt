@@ -1,3 +1,5 @@
+package com.canchola.ui.quotes
+
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -6,10 +8,9 @@ import com.canchola.databinding.ItemQuoteBinding
 import com.canchola.models.Quote
 
 class QuotesAdapter(
-
     private val quotes: List<Quote>,
     private val onDownloadClick: (Quote) -> Unit,
-    private val onOptionsClick: (Quote) -> Unit // <--- AGREGA ESTA LÍNEA
+    private val onOptionsClick: (Quote) -> Unit
 ) : RecyclerView.Adapter<QuotesAdapter.QuoteViewHolder>() {
 
     class QuoteViewHolder(val binding: ItemQuoteBinding) : RecyclerView.ViewHolder(binding.root)
@@ -22,11 +23,22 @@ class QuotesAdapter(
     override fun onBindViewHolder(holder: QuoteViewHolder, position: Int) {
         val quote = quotes[position]
         holder.binding.apply {
-            tvFolio.text = "Folio: ${quote.idQuote}"
-            tvCliente.text = quote.nameCustomer
-            tvAtteDetalle.text = quote.atte
+            // Título dinámico
+            tvFolio.text = if (quote.isQuote()) "Folio: #${quote.idQuote}" else "Proyecto: #${quote.idProject}"
+            
+            // Mostrar nombre del proyecto si existe
+            if (!quote.projectName.isNullOrEmpty()) {
+                tvProjectName.visibility = View.VISIBLE
+                tvProjectName.text = quote.projectName
+            } else {
+                tvProjectName.visibility = View.GONE
+            }
 
-            // Lógica de Keywords
+            // Cliente unificado
+            tvCliente.text = quote.getFinalCustomer()
+            tvAtteDetalle.text = quote.atte ?: ""
+
+            // Keywords / Tags
             if (!quote.keywords.isNullOrEmpty()) {
                 tvKeywords.visibility = View.VISIBLE
                 tvKeywords.text = quote.keywords.replace(",", " • ")
@@ -34,10 +46,14 @@ class QuotesAdapter(
                 tvKeywords.visibility = View.GONE
             }
 
-            // Acción del botón de descarga
-         //   btnDownload.setOnClickListener { onDownloadClick(quote) }
+            // Barra de Progreso General
+            val porcentaje = quote.porcentaje_completado ?: 0
 
-            // Acción al tocar toda la tarjeta (AQUÍ YA NO DARÁ ERROR)
+
+            // Color del Folio/Proyecto para distinguir
+            val color = if (quote.isQuote()) android.graphics.Color.parseColor("#007AFF") else android.graphics.Color.parseColor("#5856D6")
+            tvFolio.setTextColor(color)
+
             root.setOnClickListener { onOptionsClick(quote) }
         }
     }

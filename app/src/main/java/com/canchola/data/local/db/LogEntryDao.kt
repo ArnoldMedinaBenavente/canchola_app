@@ -20,8 +20,10 @@ interface LogEntryDao {
     fun getAllLogs(): Flow<List<LogEntry>>
 
     // Filtrar bitácoras de una cotización específica (si quoteId no es null)
-    @Query("SELECT * FROM log_entries WHERE quoteId = :qId ORDER BY createdAt DESC")
-    fun getLogsByQuote(qId: Int): Flow<List<LogEntry>>
+    // C:/Users/Usuario/AndroidStudioProjects/Canchola2/app/src/main/java/com/canchola/data/local/db/LogEntryDao.kt
+
+    @Query("SELECT * FROM log_entries WHERE quoteId = :qId OR idProject = :pId ORDER BY createdAt DESC")
+    fun getLogsByQuoteOrProject(qId: Int?, pId: Int?): Flow<List<LogEntry>>
 
     // --- FUNCIONES PARA EL FLUJO DE INTERNET ---
 
@@ -37,8 +39,8 @@ interface LogEntryDao {
     @Delete
     suspend fun delete(entry: LogEntry)
     
-    // OBTENER LOS LOG_ENTRIES DE UN idConcept
-    @Query("SELECT * FROM log_entries WHERE idConcept = :idConcept ORDER BY createdAt DESC")
-    suspend fun getLogsByConcept(idConcept: String): List<LogEntry>
+    // OBTENER LOS LOG_ENTRIES DE UN idConcept filtrado por cotización o proyecto
+    @Query("SELECT * FROM log_entries WHERE idConcept = :idConcept AND (quoteId = :qId OR idProject = :pId) ORDER BY createdAt DESC")
+    suspend fun getLogsByConcept(idConcept: String, qId: Int?, pId: Int?): List<LogEntry>
 
 }
