@@ -26,6 +26,10 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
         <activity
+            android:name=".ui.quotes.CreateQuoteActivity"
+            android:exported="false"
+            android:label="Nueva Cotización" />
+        <activity
             android:name=".ui.quotes.QuoteDetailActivity"
             android:exported="false" />
         <activity

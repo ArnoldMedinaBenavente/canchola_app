@@ -38,6 +38,7 @@ import com.canchola.models.QuoteConcepts
 import com.canchola.ui.AddLogSheet
 import com.canchola.ui.photo.PhotoAdapter
 import com.canchola.ui.photo.Photos
+import com.canchola.ui.quotes.CreateQuoteActivity
 import com.canchola.ui.quotes.QuoteDetailActivity
 import com.canchola.ui.quotes.QuotesAdapter
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -215,6 +216,12 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // Botón para ir a crear cotización
+        binding.btnAddQuote.setOnClickListener {
+            val intent = Intent(this, CreateQuoteActivity::class.java)
+            startActivity(intent)
+        }
+
         // Botón Actualizar
         binding.btnRefresh.setOnClickListener {
             loadQuotes() // Llama a la función que trae los datos de Laravel
@@ -476,6 +483,7 @@ class HomeActivity : AppCompatActivity() {
                     if (comentario.isNotEmpty() || uris.isNotEmpty() || cant.isNotEmpty()) {
                         val insertedId = db.logEntryDao().insert(LogEntry(
                             quoteId = quote.idQuote,
+                            idProject = quote.idProject,
                             idConcept = idConcept,
                             comment = comentario.ifEmpty { "Avance de $nombre" },
                             cantidad = cant,
