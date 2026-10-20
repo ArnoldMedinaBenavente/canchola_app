@@ -69,7 +69,6 @@ class QuoteDetailActivity : AppCompatActivity() {
     private var currentPhotoUri: Uri? = null
     private var currentPhotoAbsolutePath: String? = null
 
-    // Para dictado por voz en alcances
     private var activeEditText: EditText? = null
     private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
@@ -109,7 +108,6 @@ class QuoteDetailActivity : AppCompatActivity() {
         db = AppDatabase.getDatabase(this)
         sessionManager = SessionManager(this)
         
-        // Uso de IntentCompat para solucionar la depreciación de getSerializableExtra
         quote = IntentCompat.getSerializableExtra(intent, "QUOTE_DATA", Quote::class.java)
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -119,6 +117,55 @@ class QuoteDetailActivity : AppCompatActivity() {
             mostrarDatos(it)
             setupAlcances(it)
             setupButtons(it)
+            
+            if (it.isLocal()) {
+                binding.btnEditQuoteDetail?.visibility = View.VISIBLE
+                binding.btnDeleteQuoteDetail?.visibility = View.VISIBLE
+                
+                binding.btnEditQuoteDetail?.setOnClickListener {
+                    val intent = Intent(this, CreateQuoteActivity::class.java)
+                    intent.putExtra("QUOTE_DATA", quote)
+                    startActivity(intent)
+                    finish()
+                }
+
+                binding.btnDeleteQuoteDetail?.setOnClickListener {
+                    confirmDeleteQuote(quote!!)
+                }
+            } else {
+                binding.btnEditQuoteDetail?.visibility = View.GONE
+                binding.btnDeleteQuoteDetail?.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun confirmDeleteQuote(quote: Quote) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("¿Eliminar cotización?")
+            .setMessage("Esta acción eliminará la cotización local y todos sus datos asociados. No se puede deshacer.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Eliminar") { _, _ ->
+                deleteLocalQuote(quote)
+            }
+            .show()
+    }
+
+    private fun deleteLocalQuote(quote: Quote) {
+        lifecycleScope.launch {
+            try {
+                val logId = quote.unique_id.removePrefix("LOCAL_").toIntOrNull()
+                if (logId != null) {
+                    db.quoteConceptDao().deleteByLog(logId)
+                    db.photoDao().deletePhotosByLog(logId)
+                    db.logEntryDao().deleteById(logId)
+                }
+                db.quoteDao().deleteQuoteByUniqueId(quote.unique_id)
+                Toast.makeText(this@QuoteDetailActivity, "Cotización eliminada", Toast.LENGTH_SHORT).show()
+                finish()
+            } catch (e: Exception) {
+                Log.e("DELETE_ERROR", "Error al eliminar: ${e.message}")
+                Toast.makeText(this@QuoteDetailActivity, "Error al eliminar", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -141,7 +188,7 @@ class QuoteDetailActivity : AppCompatActivity() {
     }
 
     private fun mostrarDatos(quote: Quote) {
-        binding.detailsTvFolio.text = if (quote.isQuote()) "Folio: #${quote.idQuote}" else "Proyecto: #${quote.idProject}"
+        binding.detailsTvFolio.text = if (quote.isQuote()) "Folio: #${quote.idQuote}" else quote.getDisplayTitle()
         binding.tvClienteDetalle.text = quote.getFinalCustomer()
         binding.tvFechaDetalle.text = quote.atte
 
@@ -163,7 +210,6 @@ class QuoteDetailActivity : AppCompatActivity() {
                 val conceptoLimpio = concepto.trim()
                 if (conceptoLimpio.isNotEmpty()) {
                     val dataConcepto = conceptoLimpio.split(";")
-                    // EXTRACCIÓN CORRECTA BASADA EN LOS ÍNDICES (;)
                     val idConcepto = dataConcepto.getOrNull(0) ?: ""
                     val nombreConcepto = dataConcepto.getOrNull(1) ?: ""
                     val cantidadTotal = dataConcepto.getOrNull(2)?.toDoubleOrNull() ?: 0.0
@@ -193,18 +239,10 @@ class QuoteDetailActivity : AppCompatActivity() {
                             tvAcumulado.text = "${String.format(Locale.getDefault(), "%.2f", suma)} / $cantidadTotal $unitConcepto"
 
                             when {
-                                suma > cantidadTotal && cantidadTotal > 0 -> {
-                                    tvAcumulado.setTextColor(Color.parseColor("#FF3B30")) // Rojo
-                                }
-                                suma == cantidadTotal && cantidadTotal > 0 -> {
-                                    tvAcumulado.setTextColor(Color.parseColor("#34C759")) // Verde
-                                }
-                                suma > 0 && suma < cantidadTotal -> {
-                                    tvAcumulado.setTextColor(Color.parseColor("#FFCC00")) // Amarillo
-                                }
-                                else -> {
-                                    tvAcumulado.setTextColor(Color.GRAY)
-                                }
+                                suma > cantidadTotal && cantidadTotal > 0 -> tvAcumulado.setTextColor(Color.parseColor("#FF3B30"))
+                                suma == cantidadTotal && cantidadTotal > 0 -> tvAcumulado.setTextColor(Color.parseColor("#34C759"))
+                                suma > 0 && suma < cantidadTotal -> tvAcumulado.setTextColor(Color.parseColor("#FFCC00"))
+                                else -> tvAcumulado.setTextColor(Color.GRAY)
                             }
                         } catch (e: Exception) {
                             Log.e("ROOM_ERROR", "Error al obtener logs: ${e.message}")
@@ -427,7 +465,7 @@ class QuoteDetailActivity : AppCompatActivity() {
                 }
                 
                 val repository = QuoteConceptRepository(
-                    quote, sessionManager.getUserId(), db.quoteConceptDao(), db.logEntryDao(), db.photoDao(), apiService, this@QuoteDetailActivity
+                    quote, sessionManager.getUserId() ?: 0, db.quoteDao(), db.quoteConceptDao(), db.logEntryDao(), db.photoDao(), apiService, this@QuoteDetailActivity
                 )
                 val quoteConceptsList = db.quoteConceptDao().getUnsyncedConcepts(quote.idQuote, quote.idProject)
                 val isSynced = repository.SyncConcepts(quoteConceptsList)

@@ -14,8 +14,14 @@ interface PhotoDao {
     @Query("DELETE FROM photos WHERE photoId = :photoId")
     suspend fun deletePhoto(photoId: Int)
 
+    @Query("DELETE FROM photos WHERE logEntryId = :logId")
+    suspend fun deletePhotosByLog(logId: Int)
+
     @Query("SELECT * FROM photos WHERE isUploaded = 0")
     suspend fun getUnsyncedPhotos(): List<Photos>
+
+    @Query("SELECT * FROM photos WHERE logEntryId = :idLog")
+    suspend fun getPhotosByLog(idLog: Int): List<Photos>
 
     @Query("SELECT * FROM photos WHERE logEntryId = :idLog AND isUploaded = 0")
     suspend fun getUnsyncedPhotosByLog(idLog: Int): List<Photos>

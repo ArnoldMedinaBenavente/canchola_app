@@ -1,5 +1,6 @@
 package com.canchola.ui.quotes
 
+import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -10,7 +11,8 @@ import com.canchola.models.Quote
 class QuotesAdapter(
     private val quotes: List<Quote>,
     private val onDownloadClick: (Quote) -> Unit,
-    private val onOptionsClick: (Quote) -> Unit
+    private val onOptionsClick: (Quote) -> Unit,
+    private val onDeleteClick: (Quote) -> Unit
 ) : RecyclerView.Adapter<QuotesAdapter.QuoteViewHolder>() {
 
     class QuoteViewHolder(val binding: ItemQuoteBinding) : RecyclerView.ViewHolder(binding.root)
@@ -24,7 +26,7 @@ class QuotesAdapter(
         val quote = quotes[position]
         holder.binding.apply {
             // Título dinámico
-            tvFolio.text = if (quote.isQuote()) "Folio: #${quote.idQuote}" else "Proyecto: #${quote.idProject}"
+            tvFolio.text = if (quote.isQuote()) "Folio: #${quote.idQuote}" else quote.getDisplayTitle()
             
             // Mostrar nombre del proyecto si existe
             if (!quote.projectName.isNullOrEmpty()) {
@@ -46,9 +48,20 @@ class QuotesAdapter(
                 tvKeywords.visibility = View.GONE
             }
 
-            // Barra de Progreso General
-            val porcentaje = quote.porcentaje_completado ?: 0
-
+            // Botones para cotizaciones locales
+            if (quote.isLocal()) {
+                layoutActionsLocal.visibility = View.VISIBLE
+                btnEditLocal.setOnClickListener {
+                    val intent = Intent(holder.itemView.context, CreateQuoteActivity::class.java)
+                    intent.putExtra("QUOTE_DATA", quote)
+                    holder.itemView.context.startActivity(intent)
+                }
+                btnDeleteLocal.setOnClickListener {
+                    onDeleteClick(quote)
+                }
+            } else {
+                layoutActionsLocal.visibility = View.GONE
+            }
 
             // Color del Folio/Proyecto para distinguir
             val color = if (quote.isQuote()) android.graphics.Color.parseColor("#007AFF") else android.graphics.Color.parseColor("#5856D6")

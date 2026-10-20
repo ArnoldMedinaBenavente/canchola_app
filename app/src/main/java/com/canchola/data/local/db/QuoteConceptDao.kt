@@ -9,39 +9,38 @@ import com.canchola.models.QuoteConcepts
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-@JvmSuppressWildcards
 interface QuoteConceptDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: QuoteConcepts): Long
 
-    // Obtener todas las bitácoras para mostrar en una lista
     @Query("SELECT * FROM quoteConcepts ORDER BY createdAt DESC")
     fun getAllLConcepts(): Flow<List<QuoteConcepts>>
 
-    // Filtrar bitácoras de una cotización específica
+    @Query("SELECT * FROM quoteConcepts ORDER BY createdAt DESC")
+    suspend fun getAllLConceptsDirect(): List<QuoteConcepts>
+
     @Query("SELECT * FROM quoteConcepts WHERE quoteId = :qId OR idProject = :qId ORDER BY createdAt DESC")
     fun getConceptsByQuote(qId: Int): Flow<List<QuoteConcepts>>
 
-    // --- FUNCIONES PARA EL FLUJO DE INTERNET ---
-
-    // Obtener los registros que aún no se han subido a la nube de Laravel.
-    // Usamos @JvmSuppressWildcards a nivel de interfaz para evitar que Kotlin
-    // genere List<? extends QuoteConcepts>, lo cual rompe la implementación de Room.
     @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0 AND (quoteId = :quoteId OR idProject = :projectId)")
     suspend fun getUnsyncedConcepts(quoteId: Int?, projectId: Int?): List<QuoteConcepts>
+
+    @Query("SELECT * FROM quoteConcepts WHERE logIdGenerated = :logId")
+    suspend fun getConceptsByLog(logId: Int): List<QuoteConcepts>
 
     @Query("SELECT * FROM quoteConcepts WHERE isSynced = 0")
     suspend fun getAllUnsyncedConcepts(): List<QuoteConcepts>
 
-    // Actualizar el estado a 'Sincronizado' cuando Laravel confirme la recepción
     @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE idLog = :idLog")
     suspend fun updateSyncStatusByLog(idLog: Int)
 
     @Query("UPDATE quoteConcepts SET isSynced = 1 WHERE quoteId = :id OR idProject = :id")
     suspend fun updateSyncStatus(id: Int)
 
-    // Borrar un registro
+    @Query("DELETE FROM quoteConcepts WHERE logIdGenerated = :logId")
+    suspend fun deleteByLog(logId: Int)
+
     @Delete
     suspend fun delete(entry: QuoteConcepts)
 }

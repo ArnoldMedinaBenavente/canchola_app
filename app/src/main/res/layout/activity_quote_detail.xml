@@ -51,6 +51,28 @@
                             android:layout_height="0dp"
                             android:layout_weight="1" />
 
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnEditQuoteDetail"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Editar"
+                            app:icon="@android:drawable/ic_menu_edit"
+                            android:visibility="gone"
+                            android:textColor="#007AFF"
+                            app:iconTint="#007AFF"/>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnDeleteQuoteDetail"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Eliminar"
+                            app:icon="@android:drawable/ic_menu_delete"
+                            android:visibility="gone"
+                            android:textColor="#FF3B30"
+                            app:iconTint="#FF3B30"/>
+
                         <TextView
                             android:id="@+id/detailsTvKeywords"
                             android:layout_width="wrap_content"
@@ -240,7 +262,5 @@
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-
-
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

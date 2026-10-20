@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_operations"
+        android:icon="@android:drawable/ic_menu_agenda"
+        android:title="Operaciones" />
+    <item
+        android:id="@+id/nav_new_quotes"
+        android:icon="@android:drawable/ic_menu_edit"
+        android:title="Mis Cotizaciones" />
+</menu>

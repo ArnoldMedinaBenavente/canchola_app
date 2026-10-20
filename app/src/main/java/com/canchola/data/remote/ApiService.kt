@@ -2,7 +2,7 @@ package com.canchola.data.remote
 
 import com.canchola.models.LoginResponse
 import com.canchola.models.Quote
-import com.canchola.models.QuoteConcepts
+import com.canchola.models.SyncDataResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -19,6 +19,9 @@ interface ApiService {
     @GET("getActives")
     suspend fun getActives(): Response<List<Quote>>
 
+    @GET("getAllDataForApp")
+    suspend fun loadDataForSync(): Response<SyncDataResponse>
+
     @Multipart
     @POST("create/logEntries/v1")
     suspend fun uploadLogEntry(
@@ -28,7 +31,21 @@ interface ApiService {
         @Part("id_concept") idConcept: RequestBody?,
         @Part("amount_app") amount: RequestBody?,
         @Part photos: List<MultipartBody.Part>,
-        @Part("created_at") created_at_app: RequestBody?,
+        @Part("created_at_app") created_at_app: RequestBody?,
+        @Part("latitude") latitude: RequestBody?,
+        @Part("longitude") longitude: RequestBody?
+    ): Response<GenericResponse>
+
+    @Multipart
+    @POST("create/quoteRequest/v1")
+    suspend fun uploadQuoteRequest(
+        @Part("customer_name") customer: RequestBody?,
+        @Part("project_name") project: RequestBody?,
+        @Part("comment") comment: RequestBody?,
+        @Part("concepts") concepts: RequestBody,
+        @Part photos: List<MultipartBody.Part>,
+        @Part("idUser") userId: RequestBody?,
+        @Part("created_at_app") created_at_app: RequestBody?,
         @Part("latitude") latitude: RequestBody?,
         @Part("longitude") longitude: RequestBody?
     ): Response<GenericResponse>
@@ -40,7 +57,7 @@ interface ApiService {
         @Part("project_id") idProject: RequestBody?,
         @Part("concepts") concepts: RequestBody,
         @Part("idUser") userId: RequestBody?,
-        @Part("created_at") created_at_app: RequestBody?,
+        @Part("created_at_app") created_at_app: RequestBody?,
         @Part("latitude") latitude: RequestBody?,
         @Part("longitude") longitude: RequestBody?
     ): Response<GenericResponse>

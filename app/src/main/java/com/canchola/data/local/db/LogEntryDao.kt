@@ -11,35 +11,27 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface LogEntryDao {
 
-    // Guarda la bitácora localmente (Estado inicial: isSynced = false)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: LogEntry): Long
 
-    // Obtener todas las bitácoras para mostrar en una lista
     @Query("SELECT * FROM log_entries ORDER BY createdAt DESC")
     fun getAllLogs(): Flow<List<LogEntry>>
-
-    // Filtrar bitácoras de una cotización específica (si quoteId no es null)
-    // C:/Users/Usuario/AndroidStudioProjects/Canchola2/app/src/main/java/com/canchola/data/local/db/LogEntryDao.kt
 
     @Query("SELECT * FROM log_entries WHERE quoteId = :qId OR idProject = :pId ORDER BY createdAt DESC")
     fun getLogsByQuoteOrProject(qId: Int?, pId: Int?): Flow<List<LogEntry>>
 
-    // --- FUNCIONES PARA EL FLUJO DE INTERNET ---
-
-    // Obtener los registros que aún no se han subido a la nube de Laravel
     @Query("SELECT * FROM log_entries WHERE isSynced = 0")
     suspend fun getUnsyncedLogs(): List<LogEntry>
 
-    // Actualizar el estado a 'Sincronizado' cuando Laravel confirme la recepción
     @Query("UPDATE log_entries SET isSynced = 1 WHERE id = :id")
     suspend fun updateSyncStatus(id: Int)
 
-    // Borrar un registro (por si el usuario desea eliminar una evidencia)
     @Delete
     suspend fun delete(entry: LogEntry)
+
+    @Query("DELETE FROM log_entries WHERE id = :id")
+    suspend fun deleteById(id: Int)
     
-    // OBTENER LOS LOG_ENTRIES DE UN idConcept filtrado por cotización o proyecto
     @Query("SELECT * FROM log_entries WHERE idConcept = :idConcept AND (quoteId = :qId OR idProject = :pId) ORDER BY createdAt DESC")
     suspend fun getLogsByConcept(idConcept: String, qId: Int?, pId: Int?): List<LogEntry>
 

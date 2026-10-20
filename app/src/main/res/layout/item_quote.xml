@@ -80,12 +80,37 @@
             android:layout_marginTop="4dp"/>
 
         <LinearLayout
+            android:id="@+id/layoutActionsLocal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="12dp">
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:gravity="end"
+            android:visibility="gone">
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnEditLocal"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Editar"
+                android:textSize="12sp"
+                app:icon="@android:drawable/ic_menu_edit"
+                app:iconSize="18dp"
+                android:textColor="#007AFF"
+                app:iconTint="#007AFF"/>
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDeleteLocal"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Eliminar"
+                android:textSize="12sp"
+                app:icon="@android:drawable/ic_menu_delete"
+                app:iconSize="18dp"
+                android:textColor="#FF3B30"
+                app:iconTint="#FF3B30"/>
         </LinearLayout>
 
     </LinearLayout>
