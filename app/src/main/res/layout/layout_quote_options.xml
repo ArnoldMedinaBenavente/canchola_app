@@ -25,12 +25,25 @@
         android:textSize="16sp"
         android:textColor="@color/ios_blue"/>
 
+    <!-- Nuevo botón: ENVIAR A COTIZAR (Solo para locales no sincronizados) -->
+    <TextView
+        android:id="@+id/btnSendToServer"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Enviar a cotizar"
+        android:gravity="center_vertical"
+        android:drawableStart="@android:drawable/ic_menu_send"
+        android:drawablePadding="15dp"
+        android:textSize="16sp"
+        android:textColor="@color/ios_blue"
+        android:visibility="gone"/>
+
     <!-- Nuevo botón: EDITAR (Solo para locales) -->
     <TextView
         android:id="@+id/btnEditQuote"
         android:layout_width="match_parent"
         android:layout_height="50dp"
-        android:text="Editar Cotización"
+        android:text="Editar "
         android:gravity="center_vertical"
         android:drawableStart="@android:drawable/ic_menu_edit"
         android:drawablePadding="15dp"
@@ -43,26 +56,15 @@
         android:id="@+id/btnDeleteQuote"
         android:layout_width="match_parent"
         android:layout_height="50dp"
-        android:text="Eliminar Cotización"
+        android:text="Eliminar "
         android:gravity="center_vertical"
         android:drawableStart="@android:drawable/ic_menu_delete"
         android:drawablePadding="15dp"
         android:textSize="16sp"
-        android:textColor="#FF3B30"
+        android:textColor="@color/ios_blue"
         android:visibility="gone"/>
 
-    <!-- Nuevo botón: ENVIAR A LARAVEL (Solo para locales) -->
-    <TextView
-        android:id="@+id/btnSendToServer"
-        android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:text="Enviar a Laravel"
-        android:gravity="center_vertical"
-        android:drawableStart="@android:drawable/stat_sys_upload"
-        android:drawablePadding="15dp"
-        android:textSize="16sp"
-        android:textColor="#34C759"
-        android:visibility="gone"/>
+
 
     <TextView
         android:id="@+id/btnProgress"

@@ -215,11 +215,24 @@ class HomeActivity : AppCompatActivity() {
         val btnEdit = view.findViewById<TextView>(R.id.btnEditQuote)
         val btnDelete = view.findViewById<TextView>(R.id.btnDeleteQuote)
         val btnSend = view.findViewById<TextView>(R.id.btnSendToServer)
+        
+        val btnViewMore = view.findViewById<TextView>(R.id.btnViewMore)
+        val btnProgress = view.findViewById<TextView>(R.id.btnProgress)
+        val btnAddComment = view.findViewById<TextView>(R.id.btnAddComment)
+        val btnAddPhoto = view.findViewById<TextView>(R.id.btnAddPhoto)
 
         if (quote.isLocal()) {
+            // MOSTRAR solo opciones de Solicitud (Gestión)
             btnEdit.visibility = View.VISIBLE
             btnDelete.visibility = View.VISIBLE
-            btnSend.visibility = View.VISIBLE
+            // Mostrar enviar a cotizar solo si no se ha sincronizado
+            btnSend.visibility =  View.VISIBLE
+            
+            // OCULTAR todas las opciones de seguimiento operativo (Pedido por el usuario)
+            btnViewMore.visibility = View.GONE
+            btnProgress.visibility = View.GONE
+            btnAddComment.visibility = View.GONE
+            btnAddPhoto.visibility = View.GONE
             
             btnEdit.setOnClickListener {
                 dialog.dismiss()
@@ -237,30 +250,40 @@ class HomeActivity : AppCompatActivity() {
                 dialog.dismiss()
                 performSyncAll()
             }
-        }
+        } else {
+            // OPERACIÓN OFICIAL: Ocultar gestión local y mostrar operativo
+            btnEdit.visibility = View.GONE
+            btnDelete.visibility = View.GONE
+            btnSend.visibility = View.GONE
+            
+            btnViewMore.visibility = View.VISIBLE
+            btnProgress.visibility = View.VISIBLE
+            btnAddComment.visibility = View.VISIBLE
+            btnAddPhoto.visibility = View.VISIBLE
 
-        view.findViewById<TextView>(R.id.btnViewMore).setOnClickListener {
-            dialog.dismiss()
-            val intent = Intent(this, QuoteDetailActivity::class.java)
-            intent.putExtra("QUOTE_DATA", quote)
-            startActivity(intent)
-        }
+            btnViewMore.setOnClickListener {
+                dialog.dismiss()
+                val intent = Intent(this, QuoteDetailActivity::class.java)
+                intent.putExtra("QUOTE_DATA", quote)
+                startActivity(intent)
+            }
 
-        view.findViewById<TextView>(R.id.btnProgress).setOnClickListener {
-            dialog.dismiss()
-            mostrarFormularioAvance(quote)
-        }
-        
-        view.findViewById<TextView>(R.id.btnAddComment).setOnClickListener {
-            dialog.dismiss()
-            val sheet = AddLogSheet(quoteId = quote.idQuote, idProject = quote.idProject, type = "comment")
-            sheet.show(supportFragmentManager, "AddLog")
-        }
-        
-        view.findViewById<TextView>(R.id.btnAddPhoto).setOnClickListener {
-            dialog.dismiss()
-            val sheet = AddLogSheet(quoteId = quote.idQuote, idProject = quote.idProject, type = "photo")
-            sheet.show(supportFragmentManager, "AddLog")
+            btnProgress.setOnClickListener {
+                dialog.dismiss()
+                mostrarFormularioAvance(quote)
+            }
+            
+            btnAddComment.setOnClickListener {
+                dialog.dismiss()
+                val sheet = AddLogSheet(quoteId = quote.idQuote, idProject = quote.idProject, type = "comment")
+                sheet.show(supportFragmentManager, "AddLog")
+            }
+            
+            btnAddPhoto.setOnClickListener {
+                dialog.dismiss()
+                val sheet = AddLogSheet(quoteId = quote.idQuote, idProject = quote.idProject, type = "photo")
+                sheet.show(supportFragmentManager, "AddLog")
+            }
         }
 
         dialog.setContentView(view)
