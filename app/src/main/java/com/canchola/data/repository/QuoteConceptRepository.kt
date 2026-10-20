@@ -8,6 +8,7 @@ import android.util.Log
 import com.canchola.data.local.db.LogEntryDao
 import com.canchola.data.local.db.PhotoDao
 import com.canchola.data.local.db.QuoteConceptDao
+import com.canchola.data.local.quotes.QuoteDao
 import com.canchola.data.remote.ApiService
 import com.canchola.models.DateHelper
 import com.canchola.models.LogEntry
@@ -29,6 +30,7 @@ import java.io.File
 class QuoteConceptRepository(
     private val quote: Quote?,
     private val userId: Int,
+    private val quoteDao: QuoteDao,
     private val quoteConceptDao: QuoteConceptDao,
     private val logEntryDao: LogEntryDao,
     private val photoDao: PhotoDao,
@@ -37,6 +39,42 @@ class QuoteConceptRepository(
 ) {
     val allLogs: Flow<List<LogEntry>> = logEntryDao.getAllLogs()
 
+    /**
+     * Sincroniza SOLICITUDES de cotización (registros creados en la App)
+     */
+    suspend fun syncAppRequests(): Boolean {
+        return withContext(Dispatchers.IO) {
+            if (!isNetworkAvailable(context)) return@withContext false
+            
+            try {
+                var allSuccess = true
+                val unsyncedRequests = quoteDao.getUnsyncedAppRequests()
+
+                for (request in unsyncedRequests) {
+                    val logId = request.unique_id.removePrefix("LOCAL_").toIntOrNull() ?: continue
+                    val concepts = quoteConceptDao.getConceptsByLog(logId)
+                    val photos = photoDao.getPhotosByLog(logId)
+                    
+                    val response = uploadRequestToLaravel(request, concepts, photos)
+                    
+                    if (response.isSuccessful && response.body()?.status == "success") {
+                        quoteDao.markAsSynced(request.unique_id)
+                        photoDao.markPhotosAsUploaded(logId)
+                    } else {
+                        allSuccess = false
+                    }
+                }
+                return@withContext allSuccess
+            } catch (e: Exception) {
+                Log.e("SYNC_REQUESTS", "Error: ${e.message}")
+                return@withContext false
+            }
+        }
+    }
+
+    /**
+     * Sincroniza AVANCES en cotizaciones oficiales o proyectos
+     */
     suspend fun SyncConcepts(quoteConcepts: List<QuoteConcepts>): Boolean {
         return withContext(Dispatchers.IO) {
             if (!isNetworkAvailable(context)) return@withContext false
@@ -58,7 +96,6 @@ class QuoteConceptRepository(
                         firstConcept?.longitude
                     )
                     if (response.isSuccessful && response.body()?.status == "success") {
-                        // Actualizar estado para ambos IDs si están presentes
                         if (currentQuoteId != null) quoteConceptDao.updateSyncStatus(currentQuoteId)
                         if (currentProjectId != null) quoteConceptDao.updateSyncStatus(currentProjectId)
                     } else {
@@ -97,11 +134,10 @@ class QuoteConceptRepository(
             if (!isNetworkAvailable(context)) return@withContext false
 
             try {
-                var allSuccess = true
+                syncAppRequests()
 
                 val allUnsyncedConcepts = quoteConceptDao.getAllUnsyncedConcepts()
                 if (allUnsyncedConcepts.isNotEmpty()) {
-                    // Agrupar por quoteId o idProject para enviar en bloques
                     val groupedByQuote = allUnsyncedConcepts.groupBy { it.quoteId ?: it.idProject }
                     
                     for ((groupId, concepts) in groupedByQuote) {
@@ -118,8 +154,6 @@ class QuoteConceptRepository(
                         )
                         if (response.isSuccessful && response.body()?.status == "success") {
                             quoteConceptDao.updateSyncStatus(groupId)
-                        } else {
-                            allSuccess = false
                         }
                     }
                 }
@@ -133,17 +167,60 @@ class QuoteConceptRepository(
                         logEntryDao.updateSyncStatus(log.id)
                         photoDao.markPhotosAsUploaded(log.id)
                         quoteConceptDao.updateSyncStatusByLog(log.id)
-                    } else {
-                        allSuccess = false
                     }
                 }
 
-                return@withContext allSuccess
+                return@withContext true
             } catch (e: Exception) {
-                Log.e("SYNC_ALL_ERROR", "Error en syncAllUnsyncedData: ${e.message}")
+                Log.e("SYNC_ALL_ERROR", "Error: ${e.message}")
                 return@withContext false
             }
         }
+    }
+
+    private suspend fun uploadRequestToLaravel(
+        quote: Quote,
+        quoteConcepts: List<QuoteConcepts>,
+        photos: List<Photos>
+    ): Response<ApiService.GenericResponse> {
+        val gson = Gson()
+        val conceptsJson = gson.toJson(quoteConcepts).toRequestBody("application/json".toMediaTypeOrNull())
+        
+        val customerName = quote.nameCustomer?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val projectName = quote.projectName?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val comment = quote.atte?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val userIdPart = userId.toString().toRequestBody("text/plain".toMediaTypeOrNull())
+        val createdAtPart = DateHelper.getCurrentDateForServer().toRequestBody("text/plain".toMediaTypeOrNull())
+        
+        val first = quoteConcepts.firstOrNull()
+        val latPart = first?.latitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+        val lonPart = first?.longitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+
+        val photoParts = photos.mapNotNull { photo ->
+            try {
+                val uri = Uri.parse(photo.uri)
+                val path = uri.path ?: return@mapNotNull null
+                val file = File(path)
+                if (file.exists()) {
+                    val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                    MultipartBody.Part.createFormData("photos[]", file.name, requestFile)
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        return apiService.uploadQuoteRequest(
+            customer = customerName,
+            project = projectName,
+            comment = comment,
+            concepts = conceptsJson,
+            photos = photoParts,
+            userId = userIdPart,
+            created_at_app = createdAtPart,
+            latitude = latPart,
+            longitude = lonPart
+        )
     }
 
     private suspend fun uploadToLaravel(
